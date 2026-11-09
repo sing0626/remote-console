@@ -1,0 +1,10 @@
+{
+  "source": "branding/icon.svg",
+  "master": "branding/icon-1024.png",
+  "platforms": [
+    "ios-control",
+    "android-control",
+    "android-server",
+    "vps-server"
+  ]
+}

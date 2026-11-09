@@ -1,6 +1,6 @@
 {
-  "name": "遙控台",
-  "short_name": "遙控台",
+  "name": "半雲電話",
+  "short_name": "半雲電話",
   "start_url": "/control",
   "display": "standalone",
   "background_color": "#000000",

@@ -1,3 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#007bff">
-  <path d="M20 3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h3l-1 1v2h12v-2l-1-1h3c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 13H4V5h16v11z"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#173F43"/><stop offset=".54" stop-color="#0D252F"/><stop offset="1" stop-color="#09141D"/></linearGradient>
+    <radialGradient id="light" cx=".22" cy=".14" r=".9"><stop stop-color="#8CE8CB" stop-opacity=".2"/><stop offset="1" stop-color="#8CE8CB" stop-opacity="0"/></radialGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#D6FFF0"/><stop offset="1" stop-color="#7DCCBA"/></linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#B7F6DF" stop-opacity=".14"/><stop offset="1" stop-color="#B7F6DF" stop-opacity=".02"/></linearGradient>
+  </defs>
+  <path fill="url(#base)" d="M0 0h1024v1024H0z"/>
+  <path fill="url(#light)" d="M0 0h1024v1024H0z"/>
+  <path d="M426 602H308c-66 0-112-38-112-95 0-46 27-82 71-95 0-74 56-126 123-126 47 0 84 23 108 61" fill="none" stroke="url(#cloud)" stroke-width="49" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="472" y="252" width="286" height="514" rx="73" fill="url(#screen)" stroke="url(#cloud)" stroke-width="49"/>
+  <path d="M583 302h65M591 711h49" fill="none" stroke="#BFF9E4" stroke-width="24" stroke-linecap="round"/>
+  <path d="M535 501l44 44 104-104" fill="none" stroke="#9AE8CE" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

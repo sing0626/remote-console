@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"remoteconsole.local/connect/envelope"
+	"remoteconsole.local/connect/releaseinfo"
 	"strings"
 	"time"
 )
@@ -40,10 +41,11 @@ func newHandler(payload []byte, upstream *url.URL) http.Handler {
 		http.Error(w, `{"error":"phone_offline"}`, http.StatusServiceUnavailable)
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /_remoteconsole/brand.svg", func(w http.ResponseWriter, r *http.Request) { serveBrandAsset(w, r) })
 	mux.HandleFunc("GET /_remoteconsole/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		json.NewEncoder(w).Encode(map[string]any{"gateway_ready": true, "phone_online": online(upstream), "automatic_enrollment": true})
+		json.NewEncoder(w).Encode(map[string]any{"gateway_ready": true, "phone_online": online(upstream), "automatic_enrollment": true, "suite_version": releaseinfo.Version})
 	})
 	mux.HandleFunc("GET /_remoteconsole/enroll", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -55,6 +57,7 @@ func newHandler(payload []byte, upstream *url.URL) http.Handler {
 	return mux
 }
 func main() {
+	showVersion := flag.Bool("version", false, "print suite version and exit")
 	listen := flag.String("listen", "127.0.0.1:18079", "local 1Panel backend address")
 	dir := flag.String("private", "/private", "server private configuration directory")
 	pubFile := flag.String("owner-key", "/run/owner-enrollment.pub", "authorized phone public key")
@@ -62,6 +65,10 @@ func main() {
 	registryFile := flag.String("registry", "/private/devices.json", "private multi-device registry; legacy mode if absent")
 	trustFile := flag.String("trust-store", "", "private persistent controller authorization file")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(releaseinfo.Version)
+		return
+	}
 	if _, err := os.Stat(*registryFile); err == nil {
 		handler, err := handlerFromRegistry(*registryFile, *trustFile)
 		if err != nil {

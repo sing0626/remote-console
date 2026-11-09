@@ -42,6 +42,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        findViewById<TextView>(R.id.brandVersion).text = "受控端 · ${BuildConfig.VERSION_NAME}"
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         prefs = Prefs(this)

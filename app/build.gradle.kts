@@ -37,8 +37,8 @@ android {
         applicationId = "lab.remote.host"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1016
-        versionName = "0.1.15"
+        versionCode = rootProject.extra["suiteBuild"] as Int
+        versionName = rootProject.extra["suiteVersion"] as String
     }
 
     signingConfigs {
@@ -66,6 +66,7 @@ android {
                 ?: signingConfigs.getByName("debug")
         }
     }
+    buildFeatures { buildConfig = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

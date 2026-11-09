@@ -6,14 +6,15 @@ android {
         applicationId = "lab.remote.controller"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1021
-        versionName = "0.3.1"
+        versionCode = rootProject.extra["suiteBuild"] as Int
+        versionName = rootProject.extra["suiteVersion"] as String
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    buildFeatures { buildConfig = true }
 }
 dependencies {
     implementation("io.github.webrtc-sdk:android:150.7871.04")

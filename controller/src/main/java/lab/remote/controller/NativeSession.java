@@ -66,7 +66,7 @@ public final class NativeSession {
             JSONObject object=new JSONObject(new String(data,StandardCharsets.UTF_8));
             if(!object.has("registry_version"))return null;
             JSONArray items=object.optJSONArray("devices");
-            if(object.optInt("registry_version")!=1||items==null||items.length()==0||items.length()>32)throw new IOException("電話清單版本未能識別，請更新遙控台。");
+            if(object.optInt("registry_version")!=1||items==null||items.length()==0||items.length()>32)throw new IOException("電話清單版本未能識別，請更新半雲電話。");
             ArrayList<Host> hosts=new ArrayList<>();HashSet<String> seen=new HashSet<>();
             for(int i=0;i<items.length();i++){
                 JSONObject item=items.getJSONObject(i);String id=item.getString("id"),name=item.getString("name");Object online=item.get("online");

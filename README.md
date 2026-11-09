@@ -1,4 +1,4 @@
-# RemoteConsole · 遙控台
+# RemoteConsole · 半雲電話
 
 自託管 Android 畫面遙控：WebRTC 聲畫、觸控、文字輸入、多控制端、同一網址切換受控電話，以及首次電話批准後自動登入嘅信任控制端。
 

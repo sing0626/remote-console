@@ -17,10 +17,12 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+import urllib.error
 
 REPO = 'sing0626/remote-console'
 PROJECT = 'remote-console-generic'
 MARKER = '.remote-console-managed'
+SUITE_VERSION = '0.4.0'
 
 
 class Paths:
@@ -66,8 +68,30 @@ def remove_owned(path):
 
 def fetch_json(url):
     req = urllib.request.Request(url, headers={'User-Agent': 'RemoteConsole-manager', 'Accept': 'application/vnd.github+json'})
-    with urllib.request.urlopen(req, timeout=30) as response:
-        return json.load(response)
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                return json.load(response)
+        except (OSError, urllib.error.URLError):
+            if attempt == 2: raise
+            print('版本資料連線中斷，正在重試…', flush=True)
+            time.sleep(2)
+
+
+def download_archive(url, target, expected_digest=None):
+    """Visible, bounded retries; only a complete validated archive reaches extraction."""
+    print('正在下載伺服器程式，下面會顯示進度；停滯會自動重試。', flush=True)
+    subprocess.run(['curl', '--fail', '--location', '--retry', '4', '--retry-all-errors',
+                    '--connect-timeout', '15', '--max-time', '300', '--speed-limit', '1024',
+                    '--speed-time', '25', '--max-filesize', str(100*1024*1024), '--progress-bar',
+                    '--output', str(target), url], check=True)
+    if target.stat().st_size > 100*1024*1024:
+        raise ValueError('下載檔案超出大小限制')
+    if expected_digest:
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', expected_digest):
+            raise ValueError('無效下載完整性資料')
+        if 'sha256:'+hashlib.sha256(target.read_bytes()).hexdigest() != expected_digest:
+            raise ValueError('下載檔案 SHA-256 不符；現有部署不會切換')
 
 
 def extract_source(archive, destination):
@@ -103,6 +127,7 @@ def extract_source(archive, destination):
 
 
 def download_source(destination, release=None):
+    print('正在取得伺服器版本…', flush=True)
     if release is None:
         release = fetch_json(f'https://api.github.com/repos/{REPO}/releases/latest')['tag_name']
     if not re.fullmatch(r'v\d+\.\d+\.\d+', release):
@@ -112,14 +137,19 @@ def download_source(destination, release=None):
         raise ValueError('無效來源版本')
     with tempfile.TemporaryDirectory(prefix='remote-console-download-') as tmp:
         archive = Path(tmp)/'source.tar.gz'
-        req = urllib.request.Request(f'https://codeload.github.com/{REPO}/tar.gz/{commit}', headers={'User-Agent': 'RemoteConsole-manager'})
-        with urllib.request.urlopen(req, timeout=90) as src, archive.open('wb') as dst:
-            size = 0
-            while chunk := src.read(1024*1024):
-                size += len(chunk)
-                if size > 100*1024*1024:
-                    raise ValueError('下載檔案超出大小限制')
-                dst.write(chunk)
+        metadata = fetch_json(f'https://api.github.com/repos/{REPO}/releases/tags/{release}')
+        assets = [item for item in metadata.get('assets', []) if item['name'] == f'remote-console-server-{release}.tar.gz']
+        if len(assets) > 1: raise ValueError('重複伺服器發佈檔案')
+        if assets:
+            asset = assets[0]
+            url = asset['browser_download_url']
+            if not url.startswith(f'https://github.com/{REPO}/releases/download/{release}/'):
+                raise ValueError('未知伺服器下載來源')
+            if not asset.get('digest'): raise ValueError('伺服器發佈檔案缺少 SHA-256')
+            print('下載精簡伺服器套件 '+release+'（唔包含手機 SDK／素材）', flush=True)
+            download_archive(url, archive, asset['digest'])
+        else:
+            download_archive(f'https://codeload.github.com/{REPO}/tar.gz/{commit}', archive)
         extract_source(archive, destination)
     mark(destination, release=release, commit=commit)
     return {'release': release, 'commit': commit}
@@ -578,7 +608,7 @@ def key_input():
 
 
 def wizard(manager, args):
-    print('RemoteConsole · 新獨立部署（需要自己嘅域名、HTTPS 反代及電話公鑰）')
+    print('半雲電話 · 新獨立部署（需要自己嘅域名、HTTPS 反代及電話公鑰）')
     domain = args.domain or ask('HTTPS 域名，例如 control.example.com').lower()
     ip = args.public_ip or ask('此主機公網 IPv4')
     key, temporary = (args.owner_key, False) if args.owner_key else key_input()
@@ -599,7 +629,8 @@ def lock(path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='RemoteConsole 管理選單')
+    parser = argparse.ArgumentParser(description='半雲電話管理選單')
+    parser.add_argument('--version', action='version', version=SUITE_VERSION)
     parser.add_argument('command', nargs='?', choices=['install', 'migrate', 'update', 'status', 'start', 'stop', 'restart', 'logs', 'add-device', 'backup', 'rollback', 'uninstall', 'info'])
     parser.add_argument('--release', help='指定伺服器穩定版本；預設最新版本')
     parser.add_argument('--domain'); parser.add_argument('--public-ip'); parser.add_argument('--owner-key', type=Path)
@@ -644,7 +675,7 @@ def main():
             choices = ['install', 'status', 'start', 'stop', 'restart', 'logs', 'update', 'add-device', 'backup', 'rollback', 'uninstall', 'info']
             labels = ['安裝', '狀態', '啟動', '停止', '重新啟動', '即時日誌（Ctrl+C 返回）', '更新（保留配對及授權）', '新增電話', '備份', '還原上一版程式', '解除安裝（保留資料）', '連線／反代設定']
             while True:
-                print('\nRemoteConsole · 遙控台管理\n'+'\n'.join(f'{n}. {label}' for n, label in enumerate(labels, 1))+'\n0. 離開')
+                print('\n半雲電話 · VPS Server · '+SUITE_VERSION+'\n'+'\n'.join(f'{n}. {label}' for n, label in enumerate(labels, 1))+'\n0. 離開')
                 value = ask('選擇')
                 if value == '0': break
                 if not value.isdigit() or not 1 <= int(value) <= len(choices): continue
@@ -653,6 +684,8 @@ def main():
                 except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error: print('未完成：'+str(error), file=sys.stderr)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         raise SystemExit('未完成：'+str(error))
+    except KeyboardInterrupt:
+        raise SystemExit('已取消操作。')
 
 
 if __name__ == '__main__':

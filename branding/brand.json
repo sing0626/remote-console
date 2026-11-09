@@ -1,0 +1,8 @@
+{
+  "name": "半雲電話",
+  "slug": "halfcloud",
+  "controller_label": "半雲電話 · 控制端",
+  "host_label": "半雲電話 · 受控端",
+  "accent": "#9AE8CE",
+  "background": "#09171F"
+}

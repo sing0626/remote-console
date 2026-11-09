@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"remoteconsole.local/connect/releaseinfo"
 	"remoteconsole.local/connect/trust"
 	"strconv"
 	"strings"
@@ -69,6 +70,9 @@ func (g *deviceGateway) selection(r *http.Request) (id string, fromReferrer bool
 }
 
 func (g *deviceGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if serveBrandAsset(w, r) {
+		return
+	}
 	w.Header().Set("Referrer-Policy", "same-origin")
 	r.Header.Del(trust.DelegationHeader)
 	if g.auth != nil && strings.HasPrefix(r.URL.Path, trustPrefix) {
@@ -88,7 +92,7 @@ func (g *deviceGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-RemoteConsole-Registry", "1")
-		json.NewEncoder(w).Encode(map[string]any{"registry_version": 1, "default_device": g.defaultID, "devices": list, "trusted_controller": g.auth != nil})
+		json.NewEncoder(w).Encode(map[string]any{"registry_version": 1, "default_device": g.defaultID, "devices": list, "trusted_controller": g.auth != nil, "suite_version": releaseinfo.Version})
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/_remoteconsole/enroll" {
@@ -135,7 +139,7 @@ func (g *deviceGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet && r.URL.Path == "/_remoteconsole/status" {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		json.NewEncoder(w).Encode(map[string]any{"gateway_ready": true, "phone_online": online(d.Upstream), "automatic_enrollment": true, "device_id": id, "device_name": d.Name})
+		json.NewEncoder(w).Encode(map[string]any{"gateway_ready": true, "phone_online": online(d.Upstream), "automatic_enrollment": true, "device_id": id, "device_name": d.Name, "suite_version": releaseinfo.Version})
 		return
 	}
 	// Resolve inherited HTML/module/CSS URLs to a device-specific cache key.

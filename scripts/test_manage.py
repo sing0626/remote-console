@@ -7,6 +7,9 @@ import tarfile
 import tempfile
 import unittest
 import manage
+import hashlib
+import http.server
+import threading
 
 
 class FixtureManager(manage.Manager):
@@ -110,6 +113,14 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(self.m.calls, [])
         self.assertEqual(self.snapshot(), self.original)
 
+    def test_download_failure_cannot_switch_an_existing_deployment(self):
+        def failed_download(*args): raise ValueError('Synthetic download interruption')
+        self.m.downloader = failed_download
+        with self.assertRaises(ValueError): self.m.update()
+        self.assertEqual(self.m.calls, [])
+        self.assertEqual(self.snapshot(), self.original)
+        self.assertEqual(self.m.config()['release'], 'v0.2.0')
+
 
 class Archive(unittest.TestCase):
     def test_reject_traversal_and_links(self):
@@ -151,6 +162,32 @@ class Archive(unittest.TestCase):
             manager = manage.Manager(paths)
             self.assertEqual(manager.p.data, paths.legacy/'private')
             self.assertEqual(manager.project, 'remote-console')
+
+
+class Downloads(unittest.TestCase):
+    def test_interrupted_transfer_retries_and_digest_rejects_corruption(self):
+        payload = b'complete generic server fixture\n'*128
+        class Handler(http.server.BaseHTTPRequestHandler):
+            requests = 0
+            def do_GET(self):
+                Handler.requests += 1
+                self.send_response(200); self.send_header('Content-Length', str(len(payload))); self.end_headers()
+                self.wfile.write(payload[:13] if Handler.requests == 1 else payload)
+                self.close_connection = True
+            def log_message(self, *args): pass
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix='remote-console-download-test-') as temp:
+                target = Path(temp).resolve()/'source.tar.gz'
+                url = f'http://127.0.0.1:{server.server_port}/fixture'
+                manage.download_archive(url, target, 'sha256:'+hashlib.sha256(payload).hexdigest())
+                self.assertGreaterEqual(Handler.requests, 2)
+                self.assertEqual(target.read_bytes(), payload)
+                with self.assertRaisesRegex(ValueError, 'SHA-256'):
+                    manage.download_archive(url, target, 'sha256:'+'0'*64)
+        finally:
+            server.shutdown(); server.server_close(); thread.join(timeout=2)
 
 
 if __name__ == '__main__': unittest.main()

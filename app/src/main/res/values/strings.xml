@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">遙控台</string>
     <string name="subtitle">用另一部電話控制完整畫面 · P2P</string>
 
     <string name="label_root">ROOT</string>
     <string name="root_granted">● 已取得 Root 權限</string>
-    <string name="need_root">需要 Root 權限才能啟動 遙控台</string>
+    <string name="need_root">需要 Root 權限才能啟動 半雲電話</string>
 
     <string name="label_server">串流服務</string>
     <string name="server_running">● 運行中</string>
@@ -18,19 +17,19 @@
     <string name="action_copy">複製網址</string>
     <string name="copied">已複製：%1$s</string>
 
-    <string name="label_pin">配對 PIN（必填，6 位數字）</string>
-    <string name="pin_hint">另一部電話連線時輸入此 PIN</string>
+    <string name="label_pin">區域網相容 PIN（6 位數字）</string>
+    <string name="pin_hint">舊版區域網配對使用；外網用控制端授權登入</string>
     <string name="invalid_pin">PIN 必須是 6 位數字</string>
     <string name="label_autostart">開機後首次解鎖時啟動</string>
 
-    <string name="action_start">啟動 遙控台</string>
-    <string name="action_stop">停止 遙控台</string>
+    <string name="action_start">啟動 半雲電話</string>
+    <string name="action_stop">停止 半雲電話</string>
 
     <string name="label_log">診斷記錄</string>
     <string name="action_clear">清除</string>
     <string name="log_empty">（暫時沒有記錄）</string>
 
-    <string name="notification_channel">遙控台服務</string>
+    <string name="notification_channel">半雲電話服務</string>
     <string name="notification_channel_desc">保持電話串流服務運行</string>
     <string name="notification_running">運行中 · %1$s</string>
 </resources>

@@ -4,10 +4,12 @@ import (
 	"context"
 	"embed"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"os/signal"
+	"remoteconsole.local/connect/releaseinfo"
 	"strings"
 	"syscall"
 	"webscreen/utils"
@@ -18,6 +20,7 @@ import (
 var publicFS embed.FS
 
 func main() {
+	showVersion := flag.Bool("version", false, "print suite version and exit")
 	host := flag.String("host", "0.0.0.0", "host to bind the server to")
 	port := flag.String("port", "8081", "server port")
 	pin := flag.String("pin", "", "initial PIN for web access")
@@ -29,6 +32,10 @@ func main() {
 	// no adb is used, the scrcpy server is started locally with app_process.
 	localRoot := flag.Bool("local-root", false, "run on the device itself (root, no adb): the local Android device is streamed")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(releaseinfo.Version)
+		return
+	}
 	if *enrollmentPublicKey {
 		if err := printEnrollmentIdentity(); err != nil {
 			log.Fatal("Cannot prepare device enrollment identity")

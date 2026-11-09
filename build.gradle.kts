@@ -5,3 +5,8 @@ plugins {
     id("com.android.application") version "8.5.2" apply false
     id("org.jetbrains.kotlin.android") version "1.9.24" apply false
 }
+
+// One release identity across controller, receiver, iOS and VPS components.
+val suiteRelease = groovy.json.JsonSlurper().parse(file("release.json")) as Map<*, *>
+extra["suiteVersion"] = suiteRelease["version"].toString()
+extra["suiteBuild"] = suiteRelease["build"].toString().toInt()

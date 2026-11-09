@@ -3,8 +3,8 @@ import SwiftUI
 private enum ConsoleColor {
     static let ink = Color(red: 0.91, green: 0.97, blue: 0.97)
     static let muted = Color(red: 0.56, green: 0.67, blue: 0.72)
-    static let mint = Color(red: 0.54, green: 0.89, blue: 0.78)
-    static let base = Color(red: 0.035, green: 0.065, blue: 0.085)
+    static let mint = Color(red: 0.60, green: 0.91, blue: 0.81)
+    static let base = Color(red: 0.035, green: 0.09, blue: 0.122)
 }
 
 private struct ConsoleBackdrop: View {
@@ -187,37 +187,41 @@ struct ConsoleRoot: View {
     }
     private var devices: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 24) {
                 brand
-                HStack(alignment: .center) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("掌心之間，\n隨時連線。").font(.system(size: 33, weight: .semibold)).tracking(-1).lineSpacing(3)
-                        Text("熟悉嘅電話，近在眼前。").font(.system(size: 14)).foregroundColor(ConsoleColor.muted)
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("裝置空間").font(.system(size: 32, weight: .semibold)).tracking(-0.8)
+                        Text("你的 Android 電話，隨時連接。").font(.system(size: 13)).foregroundColor(ConsoleColor.muted)
                     }
                     Spacer(minLength: 8)
-                    Image(systemName: "iphone.radiowaves.left.and.right").font(.system(size: 46, weight: .ultraLight)).foregroundColor(ConsoleColor.mint.opacity(0.8)).rotationEffect(.degrees(8)).padding(.trailing,8)
-                }.padding(.top,4)
+                    Image(systemName: "cloud").font(.system(size: 36, weight: .ultraLight)).foregroundColor(ConsoleColor.mint.opacity(0.65)).padding(.bottom,3)
+                }.padding(.top,8)
                 pairingCard
                 savedDevices
                 HStack(spacing: 0) {
                     benefit("hand.draw", "觸控遙控"); Spacer(); benefit("waveform", "聲音同步"); Spacer(); benefit("rectangle.on.rectangle", "多裝置")
                 }.padding(.horizontal,6)
-                HStack(spacing: 6) { Image(systemName: "lock.shield"); Text("首次批准一次，之後自動登入") }.font(.system(size: 11)).foregroundColor(ConsoleColor.muted.opacity(0.8)).frame(maxWidth: .infinity).padding(.bottom,12)
-            }.padding(.horizontal,24).padding(.top,14).padding(.bottom,20).frame(maxWidth: 520).frame(maxWidth: .infinity)
+                HStack(spacing: 6) { Image(systemName: "lock.shield"); Text("信任一次 · 之後免 PIN · 隨時撤銷") }.font(.system(size: 10)).foregroundColor(ConsoleColor.muted.opacity(0.8)).frame(maxWidth: .infinity).padding(.bottom,12)
+            }.padding(.horizontal,22).padding(.top,14).padding(.bottom,20).frame(maxWidth: 520).frame(maxWidth: .infinity)
         }
     }
     private var brand: some View {
         HStack(spacing: 11) {
-            Image(systemName: "arrow.up.right").font(.system(size: 19, weight: .bold)).foregroundColor(ConsoleColor.base).frame(width: 38, height: 38).background(LinearGradient(colors: [ConsoleColor.mint, Color(red: 0.30,green: 0.70,blue: 0.65)], startPoint: .topLeading,endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 13))
-            Text("遙控台").font(.system(size: 18, weight: .semibold)); Spacer()
-            HStack(spacing: 5) { Image(systemName: "lock.fill").font(.system(size: 9)); Text("私人連線").font(.system(size: 10, weight: .medium)) }.foregroundColor(ConsoleColor.mint).padding(.horizontal,11).padding(.vertical,8).background(ConsoleColor.mint.opacity(0.08), in: Capsule()).overlay(Capsule().stroke(ConsoleColor.mint.opacity(0.15),lineWidth: 0.7))
+            Image("BrandMark").resizable().frame(width: 44,height: 44).clipShape(RoundedRectangle(cornerRadius: 14,style: .continuous))
+            VStack(alignment: .leading,spacing: 4) {
+                Text("半雲電話").font(.system(size: 17, weight: .semibold))
+                Text("控制端").font(.system(size: 10,weight: .medium)).foregroundColor(ConsoleColor.muted)
+            }
+            Spacer()
+            Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")").font(.system(size: 10,weight: .medium,design: .monospaced)).foregroundColor(ConsoleColor.mint).padding(.horizontal,11).padding(.vertical,8).background(ConsoleColor.mint.opacity(0.08), in: Capsule()).overlay(Capsule().stroke(ConsoleColor.mint.opacity(0.15),lineWidth: 0.7))
         }
     }
     private var pairingCard: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
-                Image(systemName: "iphone").font(.system(size: 23,weight: .light)).foregroundColor(ConsoleColor.mint).frame(width: 42,height: 46).background(ConsoleColor.mint.opacity(0.08),in: RoundedRectangle(cornerRadius: 13))
-                VStack(alignment: .leading, spacing: 4) { Text("連接你的電話").font(.system(size: 17,weight: .semibold)); Text("選擇電話，信任控制端後即刻連接").font(.system(size: 11)).foregroundColor(ConsoleColor.muted) }
+                Image(systemName: "network").font(.system(size: 21,weight: .light)).foregroundColor(ConsoleColor.mint).frame(width: 42,height: 42).background(ConsoleColor.mint.opacity(0.08),in: RoundedRectangle(cornerRadius: 13))
+                VStack(alignment: .leading, spacing: 5) { Text("連線入口").font(.system(size: 18,weight: .semibold)); Text("一個網址，連接所有受控電話").font(.system(size: 11)).foregroundColor(ConsoleColor.muted) }
                 Spacer()
             }
             VStack(alignment: .leading,spacing: 8) {
@@ -250,13 +254,13 @@ struct ConsoleRoot: View {
                     Text("只喺反向代理另設登入時填寫。").font(.caption2).foregroundColor(ConsoleColor.muted)
                 }
             }
-        }.padding(20).glassSurface(27)
+        }.padding(22).glassSurface(30)
     }
     private var savedDevices: some View {
         VStack(alignment: .leading,spacing: 12) {
-            HStack { Text("已儲存入口").font(.system(size: 14,weight: .semibold)); Spacer(); Text(saved.isEmpty ? "尚未儲存" : "\(saved.count) 個").font(.system(size: 10)).foregroundColor(ConsoleColor.muted) }
+            HStack { Text("常用入口").font(.system(size: 14,weight: .semibold)); Spacer(); Text(saved.isEmpty ? "尚未儲存" : "\(saved.count) 個").font(.system(size: 10)).foregroundColor(ConsoleColor.muted) }
             if saved.isEmpty {
-                HStack(spacing: 12) { Image(systemName: "plus").font(.system(size: 15)).foregroundColor(ConsoleColor.muted).frame(width: 37,height: 42).background(.white.opacity(0.03),in: RoundedRectangle(cornerRadius: 11)); VStack(alignment: .leading,spacing: 4) { Text("第一部電話，由呢度開始").font(.system(size: 12,weight: .medium)); Text("配對後會自動加入裝置清單").font(.system(size: 10)).foregroundColor(ConsoleColor.muted) }; Spacer() }.padding(15).background(.white.opacity(0.025),in: RoundedRectangle(cornerRadius: 20)).overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.055),lineWidth: 0.7))
+                HStack(spacing: 12) { Image(systemName: "plus").font(.system(size: 15)).foregroundColor(ConsoleColor.muted).frame(width: 37,height: 42).background(.white.opacity(0.03),in: RoundedRectangle(cornerRadius: 11)); VStack(alignment: .leading,spacing: 4) { Text("新增第一個入口").font(.system(size: 12,weight: .medium)); Text("先輸入網址，再選擇受控電話").font(.system(size: 10)).foregroundColor(ConsoleColor.muted) }; Spacer() }.padding(17).background(.white.opacity(0.025),in: RoundedRectangle(cornerRadius: 20)).overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.055),lineWidth: 0.7))
             }
             ForEach(saved,id: \.self) { value in
                 Button { address = value } label: { HStack(spacing: 12) { Image(systemName: "iphone").font(.system(size: 23,weight: .light)).foregroundColor(ConsoleColor.mint).frame(width: 36); VStack(alignment: .leading,spacing: 4) { Text("遙控入口").font(.system(size: 13,weight: .medium)); Text(URL(string: value)?.host ?? value).font(.system(size: 10)).foregroundColor(ConsoleColor.muted).lineLimit(1) }; Spacer(); Image(systemName: "arrow.up.right").font(.system(size: 12)).foregroundColor(ConsoleColor.muted) }.padding(16).glassSurface(20) }.buttonStyle(PressFeedback()).contextMenu { Button("移除電話",role: .destructive) { saved.removeAll { $0 == value }; UserDefaults.standard.set(saved,forKey: "remoteEndpoints") } }
@@ -351,11 +355,15 @@ struct ConsoleRoot: View {
                     VStack(alignment: .leading, spacing: 18) {
                         Text("等候受控電話批准").font(.system(size: 18,weight: .semibold))
                         Text(session.approvalCode).font(.system(size: 28,weight: .semibold,design: .monospaced)).foregroundColor(ConsoleColor.mint).accessibilityIdentifier("session.approvalCode")
-                        Text("喺受控電話開「遙控台 → 控制端授權」，核對代碼同名稱「\(session.approvalName)」後批准。之後可自動登入所有電話。").font(.system(size: 12)).foregroundColor(ConsoleColor.muted).lineSpacing(5)
+                        Text("喺受控電話開「半雲電話 → 控制端授權」，核對代碼同名稱「\(session.approvalName)」後批准。之後可自動登入所有電話。").font(.system(size: 12)).foregroundColor(ConsoleColor.muted).lineSpacing(5)
                     }.padding(25).glassSurface(24).padding(20)
                 }
-                Text(session.detail).font(.system(size: 10,design: .monospaced)).foregroundColor(.white.opacity(0.8)).padding(.horizontal,11).padding(.vertical,8).glassSurface(12).padding(12).allowsHitTesting(false).accessibilityIdentifier("session.detail")
             }.clipShape(RoundedRectangle(cornerRadius: fullscreen ? 0 : 22)).overlay(RoundedRectangle(cornerRadius: fullscreen ? 0 : 22).stroke(.white.opacity(0.08),lineWidth: 0.7))
+            HStack(spacing: 7) {
+                Image(systemName: "waveform.path").foregroundColor(ConsoleColor.mint)
+                Text(session.detail).lineLimit(1).minimumScaleFactor(0.75).accessibilityIdentifier("session.detail")
+                Spacer(minLength: 0)
+            }.font(.system(size: 9,design: .monospaced)).foregroundColor(ConsoleColor.muted).padding(.horizontal,12).padding(.vertical,2)
             if !session.notice.isEmpty { Text(session.notice).font(.system(size: 11)).foregroundColor(ConsoleColor.muted).padding(.horizontal,10) }
             controlDock
         }.padding(.horizontal,fullscreen ? 0 : 12).padding(.top,fullscreen ? 0 : 8).padding(.bottom,8)
@@ -363,6 +371,7 @@ struct ConsoleRoot: View {
     private var sessionHeader: some View {
         HStack(spacing: 10) {
             iconButton("chevron.left",label: "電話清單") { session.disconnect() }
+            Image("BrandMark").resizable().frame(width: 28,height: 28).clipShape(RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading,spacing: 4) {
                 Text(session.deviceName).font(.system(size: 14,weight: .semibold)).lineLimit(1)
                 HStack(spacing: 5) { Circle().fill(session.ready ? ConsoleColor.mint : Color.orange.opacity(0.8)).frame(width: 5,height: 5); Text(session.status).font(.system(size: 9)).foregroundColor(ConsoleColor.muted).lineLimit(2).accessibilityIdentifier("session.status") }

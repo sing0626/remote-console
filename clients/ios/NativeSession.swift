@@ -74,7 +74,7 @@ final class NativeSession: NSObject, ObservableObject {
         if (response.value(forHTTPHeaderField: "Content-Type") ?? "").contains("text/html") { return nil }
         guard data.count <= 128 * 1024, let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw Failure.message("電話清單格式無效。") }
         guard let version = object["registry_version"] as? Int else { return nil }
-        guard version == 1, let items = object["devices"] as? [[String: Any]], !items.isEmpty, items.count <= 32 else { throw Failure.message("電話清單版本未能識別，請更新遙控台。") }
+        guard version == 1, let items = object["devices"] as? [[String: Any]], !items.isEmpty, items.count <= 32 else { throw Failure.message("電話清單版本未能識別，請更新半雲電話。") }
         var result: [RemoteHost] = [], seen = Set<String>()
         for item in items {
             guard let id = item["id"] as? String, id.range(of: "^[a-z][a-z0-9_-]{0,31}$", options: .regularExpression) != nil,
