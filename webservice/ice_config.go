@@ -30,7 +30,12 @@ func ReadICEConfiguration(path string) (*ICEConfiguration, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = json.Unmarshal(data, c); err != nil {
+	return ParseICEConfiguration(data)
+}
+
+func ParseICEConfiguration(data []byte) (*ICEConfiguration, error) {
+	c := &ICEConfiguration{}
+	if err := json.Unmarshal(data, c); err != nil {
 		return nil, err
 	}
 	if len(c.TURN) > 0 && len(c.Secret) < 32 {

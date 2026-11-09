@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -90,6 +91,7 @@ func runEnrollment(ctx context.Context, wm *webservice.WebMaster) {
 	if data, err = os.ReadFile(filepath.Join(dir, "ice.private.json")); err == nil {
 		_ = os.WriteFile(filepath.Join(enrollmentWork, "ice.private.json"), data, 0600)
 	}
+	go refreshEnrollmentICE(ctx, wm, origin, key, transport, dir)
 	binary := filepath.Join(enrollmentWork, "frpc")
 	for ctx.Err() == nil {
 		enrollmentStatus("connecting_tunnel")
@@ -113,6 +115,39 @@ func runEnrollment(ctx context.Context, wm *webservice.WebMaster) {
 		case <-ctx.Done():
 			return
 		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+// Only ICE changes are imported; tunnel keys, certificates and controller trust
+// remain bound to the already enrolled phone. Existing media sessions continue.
+func refreshEnrollmentICE(ctx context.Context, wm *webservice.WebMaster, origin string, key *rsa.PrivateKey, transport http.RoundTripper, dir string) {
+	refresh := func() {
+		bundle, err := connect.FetchWithTransport(ctx, origin, key, transport)
+		if err != nil {
+			return
+		}
+		config, err := webservice.ParseICEConfiguration(bundle.ICE)
+		if err != nil {
+			return
+		}
+		changed, err := connect.UpdateICE(dir, origin, bundle)
+		if err != nil || !changed {
+			return
+		}
+		wm.SetICEConfiguration(config)
+		_ = os.WriteFile(filepath.Join(enrollmentWork, "ice.private.json"), bundle.ICE, 0600)
+		log.Print("[remote] relay configuration updated for new connections")
+	}
+	refresh()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			refresh()
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -261,4 +262,67 @@ func Cached(dir, origin string) bool {
 		}
 	}
 	return true
+}
+
+// UpdateICE refreshes relay settings without rewriting tunnel or device identity.
+func UpdateICE(dir, origin string, b envelope.Bundle) (bool, error) {
+	var config struct {
+		Secret string   `json:"turn_shared_secret"`
+		TURN   []string `json:"turn_urls"`
+	}
+	if json.Unmarshal(b.ICE, &config) != nil || len(config.Secret) < 32 || len(config.TURN) == 0 {
+		return false, errors.New("invalid relay refresh")
+	}
+	if !Cached(dir, origin) {
+		return false, errors.New("relay refresh requires a valid enrolled cache")
+	}
+	for name, expected := range map[string][]byte{"phone-frpc.toml": []byte(b.FRPC), "ca.crt": b.CA} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil || !bytes.Equal(data, expected) {
+			return false, errors.New("relay refresh changed the tunnel identity")
+		}
+	}
+	icePath, manifestPath := filepath.Join(dir, "ice.private.json"), filepath.Join(dir, "enrolled.json")
+	oldICE, err := os.ReadFile(icePath)
+	if err != nil || bytes.Equal(oldICE, b.ICE) {
+		return false, err
+	}
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return false, err
+	}
+	var manifest struct {
+		Origin string            `json:"origin"`
+		Hashes map[string]string `json:"hashes"`
+	}
+	if err = json.Unmarshal(data, &manifest); err != nil {
+		return false, err
+	}
+	sum := sha256.Sum256(b.ICE)
+	manifest.Hashes["ice.private.json"] = hex.EncodeToString(sum[:])
+	updated, _ := json.Marshal(manifest)
+	write := func(path string, value []byte) error {
+		f, e := os.CreateTemp(dir, ".relay-")
+		if e != nil {
+			return e
+		}
+		defer os.Remove(f.Name())
+		_, e = f.Write(value)
+		closeErr := f.Close()
+		if e != nil {
+			return e
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		return os.Rename(f.Name(), path)
+	}
+	if err = write(icePath, b.ICE); err != nil {
+		return false, err
+	}
+	if err = write(manifestPath, updated); err != nil {
+		_ = write(icePath, oldICE)
+		return false, err
+	}
+	return true, nil
 }
