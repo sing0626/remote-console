@@ -33,6 +33,9 @@ for module in ['app','controller']:
 <path android:pathData="M535,501L579,545L683,441" android:fillColor="#00000000" android:strokeColor="#9AE8CE" android:strokeWidth="34" android:strokeLineCap="round" android:strokeLineJoin="round"/>
 </vector>'''
     write(res/'drawable/ic_halfcloud_foreground.xml',foreground)
+    if module=='app':
+        notification=foreground.replace('108dp','24dp').replace('#BFF9E4','#FFFFFFFF').replace('#9AE8CE','#FFFFFFFF').replace('#129AE8CE','#00000000')
+        write(res/'drawable/ic_stat_webscreen.xml',notification)
     png(res/'drawable-nodpi/brand_mark.png',256)
 assets=root/'clients/ios/Assets.xcassets'
 js(assets/'Contents.json',{'info':{'author':'xcode','version':1}})
