@@ -40,14 +40,14 @@ try:
         tx=secrets.token_bytes(12);client.send(relay._packet(3,requested+auth,tx,key))
         assert relay._attributes(client.recv(65536),tx)[0]==0x103
         peer_xor=struct.pack('!BBHI',0,1,peer.getsockname()[1]^(relay.COOKIE>>16),int(ipaddress.ip_address(fixture_ip))^relay.COOKIE)
-        tx=secrets.token_bytes(12);client.send(relay._packet(8,[(0x12,peer_xor)]+auth,tx,key))
-        assert relay._attributes(client.recv(65536),tx)[0]==0x108
+        tx=secrets.token_bytes(12);client.send(relay._packet(9,[(0x12,peer_xor),(0xc,b'\x40\x00\0\0')]+auth,tx,key))
+        assert relay._attributes(client.recv(65536),tx)[0]==0x109
         payload=b'halfcloud-authenticated-relay-data-'+secrets.token_bytes(32)
-        client.send(relay._packet(0x16,[(0x12,peer_xor),(0x13,payload)],secrets.token_bytes(12)))
+        client.send(struct.pack('!HH',0x4000,len(payload))+payload)
         data,source=peer.recvfrom(65536);assert data==payload
         peer.sendto(data,source)
         response=client.recv(65536)
-        assert relay._attributes(response,response[8:20])[1][0x13]==payload
+        assert struct.unpack('!HH',response[:4])==(0x4000,len(payload)) and response[4:4+len(payload)]==payload
         tx=secrets.token_bytes(12);client.send(relay._packet(4,[(0xd,b'\0\0\0\0')]+auth,tx,key))
         client.recv(65536)
     print('Authenticated UDP / TCP allocations and bidirectional relay payload passed.')
@@ -56,7 +56,7 @@ try:
     else:raise AssertionError('Wrong TURN secret accepted')
     # Generate interface traffic after collection has started; not provider billing.
     subprocess.run(['curl','-fsSL','https://raw.githubusercontent.com/coturn/coturn/master/README.turnserver','-o','/dev/null'],check=True)
-    time.sleep(7)
+    time.sleep(35)
     subprocess.run(['systemctl','restart',relay.STATS],check=True)
     time.sleep(2)
     def total():
@@ -74,4 +74,6 @@ try:
     assert (relay.ETC/'config.json').is_file() and (relay.STATE/'vnstat.db').is_file()
     print('Native install, authenticated data, traffic persistence, rerun and retained-data uninstall passed.')
 finally:
+    subprocess.run(['tail','-n','45',str(relay.LOG/'turn.log')],check=False)
+    subprocess.run(['journalctl','-u',relay.STATS,'--no-pager','-n','15'],check=False)
     subprocess.run(['ip','address','del',fixture_ip+'/32','dev',interface],check=False)

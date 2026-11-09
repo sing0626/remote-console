@@ -196,11 +196,11 @@ def install(args):
     try:
         run('apt-get', 'update')
         run('apt-get', 'install', '-y', '--no-install-recommends', 'coturn', 'vnstat', 'logrotate', 'iproute2', 'ca-certificates')
-        for name in fresh_services:
-            run('systemctl', 'disable', name)
     finally:
         for name in fresh_services:
             run('systemctl', 'unmask', '--runtime', name)
+    for name in fresh_services:
+        run('systemctl', 'disable', '--now', name)
     if not existing:
         check_port(value['port'])
     value['version'] = VERSION
@@ -301,9 +301,10 @@ WantedBy=timers.target
     owner = pwd.getpwnam('vnstat')
     STATE.mkdir(mode=0o750, exist_ok=True)
     os.chown(STATE, owner.pw_uid, owner.pw_gid)
-    names = run('vnstat', '--config', ETC/'vnstat.conf', '--dbiflist', capture=True, check=False)
+    run('runuser', '-u', 'vnstat', '--', 'vnstatd', '--config', ETC/'vnstat.conf', '--initdb', '--noadd')
+    names = run('vnstat', '--config', ETC/'vnstat.conf', '--dbiflist', '1', capture=True)
     if value['interface'] not in names.stdout.split():
-        run('runuser', '-u', 'vnstat', '--', 'vnstat', '--config', ETC/'vnstat.conf', '-i', value['interface'], '--add', check=False)
+        run('runuser', '-u', 'vnstat', '--', 'vnstat', '--config', ETC/'vnstat.conf', '-i', value['interface'], '--add')
     run('systemctl', 'daemon-reload')
     run('systemctl', 'enable', SERVICE, STATS, TIMER)
     run('systemctl', 'restart', SERVICE, STATS)
