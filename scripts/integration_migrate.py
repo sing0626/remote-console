@@ -104,6 +104,10 @@ with tempfile.TemporaryDirectory(prefix='remote-console-legacy-docker-') as temp
         manager.add_device('new-third', 'Synthetic new phone', third)
         assert manager.healthy()
         authenticated()
+        with urllib.request.urlopen('http://127.0.0.1:18079/_remoteconsole/devices') as response:
+            listing = json.load(response)
+            assert listing['default_device'] == 'existing-first'
+            assert {phone['id'] for phone in listing['devices']} == {'existing-first', 'existing-second', 'new-third'}
         assert json.loads((data/'devices.json').read_text())['default_device'] == 'existing-first'
         for relative, digest in original.items():
             if relative != 'devices.json': assert manage.identity_snapshot(data)[relative] == digest

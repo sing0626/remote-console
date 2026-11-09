@@ -531,6 +531,10 @@ class Manager:
                         '--primary-key', str(self.p.data/'enrollment.pub'), '--id', ident, '--name', name, '--public-key', str(key.resolve()),
                         '--compose', str(self.p.data/'compose.devices.generated.json')], check=True)
         self.compose('up', '-d', '--build', '--remove-orphans')
+        # The registry is read when the gateway starts, not on each HTTP request.
+        self.compose('up', '-d', '--force-recreate', 'gateway')
+        if not self.healthy():
+            raise RuntimeError('新增電話後服務未通過健康檢查；原有配對資料已保留')
 
     def uninstall(self, purge=False):
         self.config()
