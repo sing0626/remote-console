@@ -4,11 +4,11 @@
 
 ## 下載
 
-目前版本為 **0.4.1 / 1041**，提供 iOS 控制端、Android 控制端、Android 受控端及 VPS 服務。控制端使用原生介面，iOS 支援互動 Liquid Glass。
+目前版本為 **0.4.2 / 1042**，提供 iOS 控制端、Android 控制端、Android 受控端及 VPS 服務。控制端使用原生介面，iOS 支援互動 Liquid Glass。
 
-APK、iOS IPA 及 VPS 安裝包見 [0.4.1 發佈頁](https://github.com/sing0626/remote-console/releases/tag/v0.4.1)。iOS IPA 需自行簽署後安裝。
+APK、iOS IPA 及 VPS 安裝包見 [0.4.2 發佈頁](https://github.com/sing0626/remote-console/releases/tag/v0.4.2)。iOS IPA 需自行簽署後安裝。
 
-0.4.1 改用以下 App ID，會建立獨立 App。升級時請先保留舊 App，新控制端重新批准一次即可。
+從舊套件轉用以下 App ID 時會建立獨立 App；請先保留舊 App，新控制端重新批准一次即可。
 
 | 元件 | App ID / Bundle ID |
 | --- | --- |
@@ -35,11 +35,46 @@ bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/main
 既有伺服器以 root 執行：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.1/install.sh) upgrade --release v0.4.1
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.2/install.sh) upgrade --release v0.4.2
 remote-console
 ```
 
 安裝器會選擇一般更新或 v0.1.14 遷移，先備份再切換服務，保留電話配對及控制端授權。切換時服務會短暫重啟。
+
+## 獨立中繼
+
+適合用細規格主機做 TURN，入口及授權服務留在原主機。
+
+在中繼主機以 root 執行，按提示輸入公網 IPv4：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.2/relay-install.sh)
+```
+
+放行 TCP／UDP 3478、UDP 49160–49260。安裝後會顯示接駁碼；在原本入口主機執行以下一行並貼上接駁碼：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.2/relay-install.sh) connect
+```
+
+受控端需使用 0.4.2 或更新版本，約一分鐘內同步網絡設定，重新連線後生效。入口網址、電話配對及控制端授權沿用。
+
+輸入 `remote-console-relay` 開啟中繼管理選單：
+
+| 指令 | 功能 |
+| --- | --- |
+| `remote-console-relay traffic` | 今日、本月及累計入／出流量 |
+| `remote-console-relay live` | 即時網卡流量 |
+| `remote-console-relay quota 1000 --count tx` | 設定每月 1000GB 出站參考額度 |
+| `remote-console-relay link` | 重新顯示接駁碼 |
+| `remote-console-relay update` | 更新中繼工具 |
+| `remote-console-relay uninstall` | 解除安裝，保留設定及統計 |
+
+流量以香港時間計日／月，統計整張網卡（包含 SSH 等連線），由安裝時開始累積。原入口主機可用以下指令還原之前的中繼設定：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.2/relay-install.sh) disconnect
+```
 
 ## 原始碼
 

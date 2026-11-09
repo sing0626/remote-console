@@ -9,6 +9,7 @@ import sys
 import tempfile
 import urllib.request
 import manage
+import relay
 
 root = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='remote-console-legacy-docker-') as temp:
@@ -111,6 +112,19 @@ with tempfile.TemporaryDirectory(prefix='remote-console-legacy-docker-') as temp
         assert json.loads((data/'devices.json').read_text())['default_device'] == 'existing-first'
         for relative, digest in original.items():
             if relative != 'devices.json': assert manage.identity_snapshot(data)[relative] == digest
+        # The real gateway must keep accepting the original trusted credential
+        # while new encrypted enrollment bundles advertise a separate relay.
+        before_relay = manage.identity_snapshot(data)
+        relay.connect_gateway(manager, dict(schema=1, kind='halfcloud-relay', public_ip='93.184.216.35',
+                              port=3478, secret='synthetic-relay-'+'x'*48), check=lambda profile: None)
+        authenticated()
+        current = manage.identity_snapshot(data)
+        for relative, digest in before_relay.items():
+            if not relative.endswith('ice.private.json'):
+                assert current[relative] == digest, relative
+        relay.connect_gateway(manager, restore=True)
+        authenticated()
+        assert manage.identity_snapshot(data) == before_relay
         manager.uninstall()
         assert data.exists()
         print('PASS: failed migration recovery, original credential login, stable phone IDs/config, update/rollback, add-phone, retained uninstall')
