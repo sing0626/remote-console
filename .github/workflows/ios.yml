@@ -73,6 +73,7 @@ jobs:
           PY
       - name: Record real UI and native connection interactions
         id: uitests
+        timeout-minutes: 16
         env:
           TEST_SCOPE: ${{ inputs.test_scope }}
         run: |
@@ -82,7 +83,7 @@ jobs:
             TEST_FILTER=(-only-testing:RemoteControllerUITests/MotionUITests/test05PlaybackWorksWithoutMicrophonePermission -only-testing:RemoteControllerUITests/MotionUITests/test06AuthorizedNativeMediaAndReconnect)
           fi
           set +e
-          xcodebuild -project clients/ios/RemoteController.xcodeproj -scheme RemoteController -configuration Debug -sdk iphonesimulator -destination "id=$DEVICE_ID" -derivedDataPath clients/ios/build/motion -clonedSourcePackagesDirPath clients/ios/build/SourcePackages CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" -parallel-testing-enabled NO -resultBundlePath clients/ios/build/motion/results.xcresult "${TEST_FILTER[@]}" test-without-building
+          xcodebuild -project clients/ios/RemoteController.xcodeproj -scheme RemoteController -configuration Debug -sdk iphonesimulator -destination "id=$DEVICE_ID" -derivedDataPath clients/ios/build/motion -clonedSourcePackagesDirPath clients/ios/build/SourcePackages CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240 -resultBundlePath clients/ios/build/motion/results.xcresult "${TEST_FILTER[@]}" test-without-building
           TEST_EXIT=$?
           sleep 2
           curl --fail http://127.0.0.1:18741/metrics -o clients/ios/build/motion/capture/fixture-metrics.json

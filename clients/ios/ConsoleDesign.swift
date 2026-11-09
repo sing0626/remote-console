@@ -363,7 +363,7 @@ struct ConsoleRoot: View {
                 Image(systemName: "waveform.path").foregroundColor(ConsoleColor.mint)
                 Text(session.detail).lineLimit(1).minimumScaleFactor(0.75).accessibilityIdentifier("session.detail")
                 Spacer(minLength: 0)
-            }.font(.system(size: 9,design: .monospaced)).foregroundColor(ConsoleColor.muted).padding(.horizontal,12).padding(.vertical,2)
+            }.font(.system(size: 9,design: .monospaced)).monospacedDigit().foregroundColor(ConsoleColor.muted).frame(height: 14).padding(.horizontal,12).padding(.vertical,2)
             if !session.notice.isEmpty { Text(session.notice).font(.system(size: 11)).foregroundColor(ConsoleColor.muted).padding(.horizontal,10) }
             controlDock
         }.padding(.horizontal,fullscreen ? 0 : 12).padding(.top,fullscreen ? 0 : 8).padding(.bottom,8)
