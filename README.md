@@ -42,7 +42,7 @@ gradle :app:assembleDebug :controller:assembleDebug
 
 受控端目前需要 ARM64 Android 及可用 Root。一般 ADB 與 Root 自投屏途徑保留不同 capture server。iOS 本地建置需要 Xcode 26 或更新版本；亦可直接下載 [iOS 0.4.0 未簽名 IPA](https://github.com/sing0626/remote-console/releases/tag/v0.4.0)，或手動啟動 `Verify iOS playback and trusted login` workflow，勾選 `publish_ipa`。Windows 使用者毋須本地 Mac，IPA 安裝前仍須自行簽署。
 
-iOS 0.4.0 使用播放專用 PCM 音訊裝置，不要求麥克風權限；首次電話批准後將憑證存於 Keychain，之後免 PIN 重連。已有 [8/8 iOS 26.2 模擬器 UI／真 WebRTC fixture 測試](https://github.com/sing0626/remote-console/actions/runs/42584224712)，包括有聲 PCM、兩電話切換、重新連線及撤銷後重新批准。實體 iPhone、音訊路由／中斷及不同公網環境仍需在自己的環境驗收。
+iOS 0.4.0 使用播放專用 PCM 音訊裝置，不要求麥克風權限；首次電話批准後將憑證存於 Keychain，之後免 PIN 重連。CI 會驗證有聲 PCM、兩電話切換、重新連線及撤銷後重新批准；每個版本的具體結果以發佈頁列出的 CI 記錄為準。實體 iPhone、音訊路由／中斷及不同公網環境仍需在自己的環境驗收。
 
 ## 建立自己的伺服器
 
