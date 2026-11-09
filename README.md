@@ -8,7 +8,7 @@
 
 - `app/`：需要 Root 嘅 Android 受控端。
 - `controller/`：原生 Android 控制端；使用者自行輸入網址。
-- `clients/ios/`：原生 SwiftUI／WebRTC 控制端；需自己的 macOS／Xcode 及簽署身份。
+- `clients/ios/`：原生 SwiftUI／WebRTC 控制端；GitHub macOS CI 自動建置未簽名 IPA，安裝時使用自己的簽署身份。
 - `public/`：瀏覽器控制介面。
 - `deploy/remote/`：多電話 HTTPS 入口、FRP、TURN 及授權服務。
 
@@ -24,7 +24,9 @@ python3 scripts/build_frpc.py --go go
 gradle :app:assembleDebug :controller:assembleDebug
 ```
 
-受控端目前需要 ARM64 Android 及可用 Root。一般 ADB 與 Root 自投屏途徑保留不同 capture server。iOS 需要 Xcode 26 或更新版本；`clients/ios/build_unsigned.sh` 只產生未簽名 IPA，安裝前須自行簽署。iOS 音訊初始化及不同手機／網絡仍需要在自己的環境驗收，這個通用副本沒有宣稱已通過實體裝置驗收。
+受控端目前需要 ARM64 Android 及可用 Root。一般 ADB 與 Root 自投屏途徑保留不同 capture server。iOS 本地建置需要 Xcode 26 或更新版本；亦可直接下載 [iOS 0.3.2 未簽名 IPA](https://github.com/sing0626/remote-console/releases/tag/controller-ios-v0.3.2)，或手動啟動 `Verify iOS playback and trusted login` workflow，勾選 `publish_ipa`。Windows 使用者毋須本地 Mac，IPA 安裝前仍須自行簽署。
+
+iOS 0.3.2 使用播放專用 PCM 音訊裝置，不要求麥克風權限；首次電話批准後將憑證存於 Keychain，之後免 PIN 重連。已有 [8/8 iOS 26.2 模擬器 UI／真 WebRTC fixture 測試](https://github.com/sing0626/remote-console/actions/runs/42584224712)，包括有聲 PCM、兩電話切換、重新連線及撤銷後重新批准。實體 iPhone、音訊路由／中斷及不同公網環境仍需在自己的環境驗收。
 
 ## 建立自己的伺服器
 
