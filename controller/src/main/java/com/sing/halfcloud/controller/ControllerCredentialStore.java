@@ -1,4 +1,4 @@
-package lab.remote.controller;
+package com.sing.halfcloud.controller;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -18,7 +18,7 @@ import javax.crypto.spec.GCMParameterSpec;
  * The server origin is authenticated as associated data, so stored values
  * cannot be substituted between gateways. No phone PIN is persisted here. */
 final class ControllerCredentialStore {
-    private static final String ALIAS="RemoteController.TrustedClient.v1";
+    private static final String ALIAS=BuildConfig.APPLICATION_ID+".trusted-client.v1";
     private final SharedPreferences preferences;
     ControllerCredentialStore(Context context){preferences=context.getSharedPreferences("trusted_controllers",Context.MODE_PRIVATE);}
     private SecretKey key()throws Exception {

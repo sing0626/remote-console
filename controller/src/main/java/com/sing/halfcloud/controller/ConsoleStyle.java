@@ -1,4 +1,4 @@
-package lab.remote.controller;
+package com.sing.halfcloud.controller;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -26,7 +26,7 @@ final class ConsoleStyle {
     Drawable ripple(Drawable d){return new RippleDrawable(ColorStateList.valueOf(0x2489e1c5),d,null);}
     Drawable inset(){GradientDrawable d=new GradientDrawable();d.setColor(0x78101b24);d.setCornerRadius(dp(14));d.setStroke(dp(.7f),0x155b8892);return d;}
     ImageView icon(String name,int size,int color){ImageView v=new ImageView(context);v.setImageDrawable(new Glyph(name,color));v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);v.setLayoutParams(new LinearLayout.LayoutParams(dp(size),dp(size)));return v;}
-    ImageView brandMark(int size){ImageView v=new ImageView(context);v.setImageResource(lab.remote.controller.R.drawable.brand_mark);v.setBackground(fill(BG,Math.round(size*.3f)));v.setClipToOutline(true);v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);v.setLayoutParams(new LinearLayout.LayoutParams(dp(size),dp(size)));return v;}
+    ImageView brandMark(int size){ImageView v=new ImageView(context);v.setImageResource(com.sing.halfcloud.controller.R.drawable.brand_mark);v.setBackground(fill(BG,Math.round(size*.3f)));v.setClipToOutline(true);v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);v.setLayoutParams(new LinearLayout.LayoutParams(dp(size),dp(size)));return v;}
     ImageButton iconButton(String name,String label){ImageButton b=new ImageButton(context);b.setImageDrawable(new Glyph(name,INK));b.setContentDescription(label);b.setScaleType(ImageView.ScaleType.FIT_CENTER);b.setPadding(dp(10),dp(10),dp(10),dp(10));b.setBackground(ripple(fill(0x06ffffff,14)));b.setStateListAnimator(null);return b;}
     LinearLayout primary(String label,String glyph){LinearLayout l=row();l.setPadding(dp(18),0,dp(18),0);GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xffa4ecd5,MINT});d.setCornerRadius(dp(16));d.setStroke(dp(.7f),0x669ef4d7);l.setBackground(ripple(d));l.setElevation(dp(3));l.addView(text(label,15,BG,true),new LinearLayout.LayoutParams(0,-2,1));l.addView(icon(glyph,20,BG));l.setClickable(true);l.setFocusable(true);l.setContentDescription(label);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(52));l.setLayoutParams(p);return l;}
     EditText input(String hint,boolean secret){EditText v=new EditText(context);v.setTextSize(14);v.setTextColor(INK);v.setHintTextColor(0xff6d8794);v.setHint(hint);v.setSingleLine(true);v.setPadding(dp(14),dp(10),dp(14),dp(10));v.setBackground(inset());v.setInputType(secret?0x12:android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);v.setTypeface(regular);v.setFontVariationSettings("'wght' 400");v.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(52)));return v;}

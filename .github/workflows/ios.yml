@@ -56,7 +56,8 @@ jobs:
       - name: Install app with microphone access denied
         run: |
           xcrun simctl install "$DEVICE_ID" clients/ios/build/motion/Build/Products/Debug-iphonesimulator/RemoteController.app
-          xcrun simctl privacy "$DEVICE_ID" revoke microphone lab.remote.controller
+          BUNDLE_ID=$(python3 -c 'import json; print(json.load(open("branding/brand.json"))["application_ids"]["ios_controller"])')
+          xcrun simctl privacy "$DEVICE_ID" revoke microphone "$BUNDLE_ID"
       - name: Start loopback WebRTC fixture
         run: |
           mkdir -p clients/ios/build/motion/capture

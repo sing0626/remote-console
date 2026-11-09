@@ -1,4 +1,4 @@
-package com.webscreen.app
+package com.sing.halfcloud.server
 
 import android.app.Activity
 import android.content.ClipData

@@ -1,10 +1,10 @@
 plugins { id("com.android.application") }
 val distributionKeystore = System.getenv("WEBSREEN_KEYSTORE")?.takeIf { it.isNotBlank() }?.let { file(it) }?.takeIf { it.isFile }
 android {
-    namespace = "lab.remote.controller"
+    namespace = rootProject.extra["controllerApplicationId"] as String
     compileSdk = 34
     defaultConfig {
-        applicationId = "lab.remote.controller"
+        applicationId = rootProject.extra["controllerApplicationId"] as String
         minSdk = 26
         targetSdk = 34
         versionCode = rootProject.extra["suiteBuild"] as Int

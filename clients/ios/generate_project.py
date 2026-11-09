@@ -6,6 +6,7 @@ root=Path(__file__).resolve().parent
 info=plistlib.loads((root/'Info.plist').read_bytes())
 release=json.loads((root.parents[1]/'release.json').read_text(encoding='utf-8'))
 brand=json.loads((root.parents[1]/'branding/brand.json').read_text(encoding='utf-8'))
+controller_bundle_id=brand['application_ids']['ios_controller']
 info['CFBundleShortVersionString']=release['version']
 info['CFBundleVersion']=str(release['build'])
 info['CFBundleDisplayName']=brand['name']
@@ -60,11 +61,13 @@ f'{i("project")} = {{isa=PBXProject;attributes={{LastUpgradeCheck=1600;}};buildC
 for label,config,settings in [
 ('pd','Debug','SDKROOT=iphoneos;IPHONEOS_DEPLOYMENT_TARGET=15.0;SWIFT_VERSION=5.0;SWIFT_OPTIMIZATION_LEVEL="-Onone";'),
 ('pr','Release','SDKROOT=iphoneos;IPHONEOS_DEPLOYMENT_TARGET=15.0;SWIFT_VERSION=5.0;SWIFT_OPTIMIZATION_LEVEL="-O";'),
-('td','Debug','ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon;PRODUCT_BUNDLE_IDENTIFIER=lab.remote.controller;PRODUCT_NAME="$(TARGET_NAME)";INFOPLIST_FILE=Info.plist;CLANG_ENABLE_OBJC_ARC=YES;SWIFT_OBJC_BRIDGING_HEADER="RemoteController-Bridging-Header.h";TARGETED_DEVICE_FAMILY="1,2";CODE_SIGN_STYLE=Automatic;SWIFT_EMIT_LOC_STRINGS=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks";'),
-('tr','Release','ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon;PRODUCT_BUNDLE_IDENTIFIER=lab.remote.controller;PRODUCT_NAME="$(TARGET_NAME)";INFOPLIST_FILE=Info.plist;CLANG_ENABLE_OBJC_ARC=YES;SWIFT_OBJC_BRIDGING_HEADER="RemoteController-Bridging-Header.h";TARGETED_DEVICE_FAMILY="1,2";CODE_SIGN_STYLE=Automatic;SWIFT_EMIT_LOC_STRINGS=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks";')]:
+('td','Debug','ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon;PRODUCT_BUNDLE_IDENTIFIER=__CONTROLLER_BUNDLE_ID__;PRODUCT_NAME="$(TARGET_NAME)";INFOPLIST_FILE=Info.plist;CLANG_ENABLE_OBJC_ARC=YES;SWIFT_OBJC_BRIDGING_HEADER="RemoteController-Bridging-Header.h";TARGETED_DEVICE_FAMILY="1,2";CODE_SIGN_STYLE=Automatic;SWIFT_EMIT_LOC_STRINGS=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks";'),
+('tr','Release','ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon;PRODUCT_BUNDLE_IDENTIFIER=__CONTROLLER_BUNDLE_ID__;PRODUCT_NAME="$(TARGET_NAME)";INFOPLIST_FILE=Info.plist;CLANG_ENABLE_OBJC_ARC=YES;SWIFT_OBJC_BRIDGING_HEADER="RemoteController-Bridging-Header.h";TARGETED_DEVICE_FAMILY="1,2";CODE_SIGN_STYLE=Automatic;SWIFT_EMIT_LOC_STRINGS=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks";')]:
+ settings=settings.replace('__CONTROLLER_BUNDLE_ID__',controller_bundle_id)
  objects.append(f'{i(label)} = {{isa=XCBuildConfiguration;buildSettings={{{settings}}};name={config};}};')
 for label,config in [('uitdebug','Debug'),('uitrelease','Release')]:
- settings='GENERATE_INFOPLIST_FILE=YES;PRODUCT_BUNDLE_IDENTIFIER=lab.remote.controller.uitests;PRODUCT_NAME="$(TARGET_NAME)";TARGETED_DEVICE_FAMILY="1,2";TEST_TARGET_NAME=RemoteController;CODE_SIGN_STYLE=Automatic;SWIFT_VERSION=5.0;IPHONEOS_DEPLOYMENT_TARGET=15.0;ENABLE_TESTING_SEARCH_PATHS=YES;ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks @loader_path/Frameworks";'
+ settings='GENERATE_INFOPLIST_FILE=YES;PRODUCT_BUNDLE_IDENTIFIER=__CONTROLLER_BUNDLE_ID__.uitests;PRODUCT_NAME="$(TARGET_NAME)";TARGETED_DEVICE_FAMILY="1,2";TEST_TARGET_NAME=RemoteController;CODE_SIGN_STYLE=Automatic;SWIFT_VERSION=5.0;IPHONEOS_DEPLOYMENT_TARGET=15.0;ENABLE_TESTING_SEARCH_PATHS=YES;ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks @loader_path/Frameworks";'
+ settings=settings.replace('__CONTROLLER_BUNDLE_ID__',controller_bundle_id)
  objects.append(f'{i(label)} = {{isa=XCBuildConfiguration;buildSettings={{{settings}}};name={config};}};')
 for label,children in [('projectconfigs',['pd','pr']),('targetconfigs',['td','tr']),('uitconfigs',['uitdebug','uitrelease'])]:
  objects.append(f'{i(label)} = {{isa=XCConfigurationList;buildConfigurations=({",".join(i(c) for c in children)},);defaultConfigurationIsVisible=0;defaultConfigurationName=Release;}};')

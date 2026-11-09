@@ -22,7 +22,7 @@ import urllib.error
 REPO = 'sing0626/remote-console'
 PROJECT = 'remote-console-generic'
 MARKER = '.remote-console-managed'
-SUITE_VERSION = '0.4.0'
+SUITE_VERSION = '0.4.1'
 
 
 class Paths:

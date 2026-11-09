@@ -1,4 +1,4 @@
-package com.webscreen.app
+package com.sing.halfcloud.server
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -298,8 +298,8 @@ class WebScreenService : Service() {
 
     companion object {
         const val TAG = "WebScreen"
-        const val ACTION_START = "com.webscreen.app.START"
-        const val ACTION_STOP = "com.webscreen.app.STOP"
+        const val ACTION_START = "com.sing.halfcloud.server.START"
+        const val ACTION_STOP = "com.sing.halfcloud.server.STOP"
         private const val CHANNEL_ID = "webscreen"
         private const val NOTIFICATION_ID = 4711
 

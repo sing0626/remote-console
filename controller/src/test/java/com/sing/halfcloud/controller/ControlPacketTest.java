@@ -1,4 +1,4 @@
-package lab.remote.controller;
+package com.sing.halfcloud.controller;
 import java.nio.*;
 import java.util.Arrays;
 public final class ControlPacketTest {

@@ -1,4 +1,4 @@
-package lab.remote.controller;
+package com.sing.halfcloud.controller;
 
 import android.content.Context;
 import android.os.Handler;

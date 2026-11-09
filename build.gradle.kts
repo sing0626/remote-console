@@ -10,3 +10,7 @@ plugins {
 val suiteRelease = groovy.json.JsonSlurper().parse(file("release.json")) as Map<*, *>
 extra["suiteVersion"] = suiteRelease["version"].toString()
 extra["suiteBuild"] = suiteRelease["build"].toString().toInt()
+val suiteBrand = groovy.json.JsonSlurper().parse(file("branding/brand.json")) as Map<*, *>
+val suiteApplicationIds = suiteBrand["application_ids"] as Map<*, *>
+extra["controllerApplicationId"] = suiteApplicationIds["android_controller"].toString()
+extra["serverApplicationId"] = suiteApplicationIds["android_server"].toString()

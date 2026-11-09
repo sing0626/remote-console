@@ -30,11 +30,11 @@ val distributionKeystore: File? = System.getenv("WEBSREEN_KEYSTORE")
     ?.takeIf { it.isFile }
 
 android {
-    namespace = "com.webscreen.app"
+    namespace = rootProject.extra["serverApplicationId"] as String
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "lab.remote.host"
+        applicationId = rootProject.extra["serverApplicationId"] as String
         minSdk = 26
         targetSdk = 34
         versionCode = rootProject.extra["suiteBuild"] as Int

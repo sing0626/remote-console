@@ -4,5 +4,10 @@
   "controller_label": "半雲電話 · 控制端",
   "host_label": "半雲電話 · 受控端",
   "accent": "#9AE8CE",
-  "background": "#09171F"
+  "background": "#09171F",
+  "application_ids": {
+    "android_controller": "com.sing.halfcloud.controller",
+    "android_server": "com.sing.halfcloud.server",
+    "ios_controller": "com.sing.halfcloud.controller"
+  }
 }

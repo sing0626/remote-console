@@ -1,4 +1,4 @@
-package com.webscreen.app
+package com.sing.halfcloud.server
 
 import java.net.Inet4Address
 import java.net.NetworkInterface

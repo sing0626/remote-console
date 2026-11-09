@@ -1,4 +1,4 @@
-package lab.remote.controller;
+package com.sing.halfcloud.controller;
 
 public final class EndpointPolicyTest {
     public static void main(String[] args) {

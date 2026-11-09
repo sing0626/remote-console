@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum ControllerCredentialVault {
-    private static let service = "lab.remote.controller.trusted-controller.v1"
+    private static let service = (Bundle.main.bundleIdentifier ?? "com.sing.halfcloud.controller") + ".trusted-controller.v1"
     private enum StorageFailure: LocalizedError {
         case unavailable
         var errorDescription: String? { "未能讀寫此 iPhone 嘅授權憑證，請解鎖手機後再連接。" }
