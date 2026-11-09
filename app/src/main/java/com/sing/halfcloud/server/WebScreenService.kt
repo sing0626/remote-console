@@ -116,17 +116,32 @@ class WebScreenService : Service() {
             args.append(" -pin-file '").append(RootShell.WORK_DIR).append("/pairing.pin'")
         }
 
-        val command = listOf(
-            "mkdir", "-p", RootShell.WORK_DIR, "&&",
-            "chmod", "700", RootShell.WORK_DIR, "&&",
-            "printf", "'%s'", "'${prefs.pin}'", ">", "'${RootShell.WORK_DIR}/pairing.pin'", "&&",
-            "chmod", "600", "'${RootShell.WORK_DIR}/pairing.pin'", "&&",
-            "cp", "-f", "'${binary.absolutePath}'", "'$remote'", "&&",
-            "chmod", "755", "'$remote'", "&&",
-            "cp", "-f", "'${remoteClient.absolutePath}'", "'${RootShell.WORK_DIR}/frpc'", "&&",
-            "chmod", "700", "'${RootShell.WORK_DIR}/frpc'", "&&",
-            "exec", args.toString()
-        ).joinToString(" ")
+        // Some temporary-root implementations grant only one external command
+        // per su invocation. Keep each setup operation and the final exec separate.
+        val pinFile = File.createTempFile("pairing-", ".tmp", cacheDir)
+        try {
+            pinFile.writeText(prefs.pin)
+            val setup = listOf(
+                listOf("mkdir", "-p", RootShell.WORK_DIR),
+                listOf("chmod", "700", RootShell.WORK_DIR),
+                listOf("cp", "-f", "'${pinFile.absolutePath}'", "'${RootShell.WORK_DIR}/pairing.pin'"),
+                listOf("chmod", "600", "'${RootShell.WORK_DIR}/pairing.pin'"),
+                listOf("cp", "-f", "'${binary.absolutePath}'", "'$remote'"),
+                listOf("chmod", "755", "'$remote'"),
+                listOf("cp", "-f", "'${remoteClient.absolutePath}'", "'${RootShell.WORK_DIR}/frpc'"),
+                listOf("chmod", "700", "'${RootShell.WORK_DIR}/frpc'")
+            )
+            for (operation in setup) {
+                val result = RootShell.run(operation)
+                if (!result.ok) {
+                    fail("初始化受控服務失敗（${result.exitCode}），請檢查 Root 授權")
+                    return
+                }
+            }
+        } finally {
+            pinFile.delete()
+        }
+        val command = "exec $args"
 
         ServerState.append("[app] starting webscreen on port $port")
         ServerState.setRunning(true)
