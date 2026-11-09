@@ -195,7 +195,8 @@ def install(args):
         run('systemctl', 'mask', '--runtime', name)
     try:
         run('apt-get', 'update')
-        run('apt-get', 'install', '-y', '--no-install-recommends', 'coturn', 'vnstat', 'logrotate', 'iproute2', 'ca-certificates')
+        run('apt-get', 'install', '-y', '--no-install-recommends', 'coturn', 'vnstat', 'logrotate', 'iproute2', 'ca-certificates', 'tzdata',
+            env=dict(os.environ, DEBIAN_FRONTEND='noninteractive'))
     finally:
         for name in fresh_services:
             run('systemctl', 'unmask', '--runtime', name)
