@@ -267,7 +267,7 @@ Group=vnstat
 StateDirectory=halfcloud-relay-traffic
 RuntimeDirectory=halfcloud-relay-traffic
 Environment=TZ=Asia/Hong_Kong
-ExecStart=/usr/sbin/vnstatd --nodaemon --noadd --noremove --config {ETC}/vnstat.conf --pidfile /run/halfcloud-relay-traffic/vnstat.pid
+ExecStart=/usr/sbin/vnstatd --nodaemon --noadd --noremove --config {ETC}/vnstat.conf
 Restart=on-failure
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -317,6 +317,7 @@ WantedBy=timers.target
             if attempt == 14:
                 raise RuntimeError('中繼未通過認證檢查，請用 remote-console-relay logs 檢查')
             time.sleep(1)
+    run('systemctl', 'is-active', '--quiet', SERVICE, STATS)
     print('\n半雲電話香港中繼 '+VERSION+' 已安裝。')
     print(f"請放行 TCP / UDP {value['port']}，以及 UDP 49160–49260。")
     print('輸入 remote-console-relay 開啟選單；traffic 查看流量。')

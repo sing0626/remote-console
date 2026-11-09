@@ -17,18 +17,23 @@ import relay
 
 if os.geteuid()!=0:raise SystemExit('Run only as root on a disposable Ubuntu runner')
 fixture_ip='93.184.216.34'
+peer_ip='93.184.216.35'
 interface,local=relay.interface_info()
 subprocess.run(['ip','address','add',fixture_ip+'/32','dev',interface],check=True)
+subprocess.run(['ip','address','add',peer_ip+'/32','dev',interface],check=True)
 try:
     args=argparse.Namespace(public_ip=fixture_ip,interface=interface,port=3478)
     relay.install(args)
     profile=relay.config()
+    with (relay.ETC/'turnserver.conf').open('a') as output:output.write('\nverbose\n')
+    subprocess.run(['systemctl','restart',relay.SERVICE],check=True)
+    time.sleep(2)
     relay.probe(profile)
     secret_before=(relay.ETC/'config.json').read_bytes()
     # A TURN allocation and Send Indication through the real unprivileged coturn.
     with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as client, socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as peer:
         client.settimeout(5);peer.settimeout(5)
-        client.connect((local,3478));peer.bind((fixture_ip,0))
+        client.connect((local,3478));peer.bind((peer_ip,0))
         tx=secrets.token_bytes(12);requested=[(0x19,b'\x11\0\0\0')]
         client.send(relay._packet(3,requested,tx))
         kind,attrs,_=relay._attributes(client.recv(65536),tx)
@@ -39,7 +44,7 @@ try:
         auth=[(6,username.encode()),(0x14,attrs[0x14]),(0x15,attrs[0x15])]
         tx=secrets.token_bytes(12);client.send(relay._packet(3,requested+auth,tx,key))
         assert relay._attributes(client.recv(65536),tx)[0]==0x103
-        peer_xor=struct.pack('!BBHI',0,1,peer.getsockname()[1]^(relay.COOKIE>>16),int(ipaddress.ip_address(fixture_ip))^relay.COOKIE)
+        peer_xor=struct.pack('!BBHI',0,1,peer.getsockname()[1]^(relay.COOKIE>>16),int(ipaddress.ip_address(peer_ip))^relay.COOKIE)
         tx=secrets.token_bytes(12);client.send(relay._packet(9,[(0x12,peer_xor),(0xc,b'\x40\x00\0\0')]+auth,tx,key))
         assert relay._attributes(client.recv(65536),tx)[0]==0x109
         payload=b'halfcloud-authenticated-relay-data-'+secrets.token_bytes(32)
@@ -77,3 +82,4 @@ finally:
     subprocess.run(['tail','-n','45',str(relay.LOG/'turn.log')],check=False)
     subprocess.run(['journalctl','-u',relay.STATS,'--no-pager','-n','15'],check=False)
     subprocess.run(['ip','address','del',fixture_ip+'/32','dev',interface],check=False)
+    subprocess.run(['ip','address','del',peer_ip+'/32','dev',interface],check=False)
