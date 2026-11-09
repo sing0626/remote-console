@@ -170,11 +170,18 @@ class Manager:
     def healthy(self):
         for attempt in range(30):
             try:
+                runtime = self.p.data/'compose.runtime.generated.json'
+                result = subprocess.run(['docker', 'compose', '--project-name', PROJECT, '-f', str(runtime), 'ps', '--all', '--format', 'json'],
+                                        check=True, capture_output=True, text=True)
+                output = result.stdout.strip()
+                rows = json.loads(output) if output.startswith('[') else [json.loads(line) for line in output.splitlines()]
+                expected = set(compose_document(self.p.source, self.p.data)['services'])
+                running = {row['Service'] for row in rows if row.get('State') == 'running' and row.get('Health', '') in ['', 'healthy']}
                 with urllib.request.urlopen('http://127.0.0.1:18079/_remoteconsole/status', timeout=2) as response:
                     value = json.load(response)
-                    if response.status == 200 and 'phone_online' in value:
+                    if running == expected and response.status == 200 and value.get('gateway_ready') is True:
                         return True
-            except (OSError, ValueError):
+            except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
                 pass
             time.sleep(2)
         return False

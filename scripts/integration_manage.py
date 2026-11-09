@@ -12,7 +12,7 @@ root = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='remote-console-docker-') as temp:
     base = Path(temp).resolve()
     archive = base/'source.tar.gz'
-    subprocess.run(['git', 'archive', '--format=tar.gz', '-o', str(archive), 'HEAD'], cwd=root, check=True)
+    subprocess.run(['git', 'archive', '--format=tar.gz', '--prefix=source/', '-o', str(archive), 'HEAD'], cwd=root, check=True)
     def download(destination, release):
         manage.extract_source(archive, destination)
         value = {'release': release or 'v0.2.1', 'commit': ('a' if release == 'v0.2.0' else 'b')*40}
