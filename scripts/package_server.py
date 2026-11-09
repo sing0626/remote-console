@@ -13,7 +13,7 @@ p.add_argument('--output', type=Path, default=root/'dist')
 args = p.parse_args()
 release = json.loads((root/'release.json').read_text())
 version = 'v'+release['version']
-tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
+tracked = subprocess.check_output(['git', '-c', 'safe.directory='+str(root), 'ls-files', '-z'], cwd=root).decode().split('\0')
 allowed = {'scripts/manage.py', 'release.json', 'install.sh', 'LICENSE', 'NOTICE.md', 'README.md'}
 files = sorted(name for name in tracked if name and (name in allowed or name.startswith('deploy/remote/')))
 for name in files:

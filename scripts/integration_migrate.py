@@ -60,8 +60,8 @@ with tempfile.TemporaryDirectory(prefix='remote-console-legacy-docker-') as temp
                                          data=json.dumps({'credential': ident+'.'+secret}).encode(), headers={'Content-Type': 'application/json'})
         with urllib.request.urlopen(request, timeout=10) as response:
             assert json.load(response)['authenticated'] is True
-    archive = base/'source.tar.gz'
-    subprocess.run(['git', '-c', 'safe.directory='+str(root), 'archive', '--format=tar.gz', '--prefix=source/', '-o', str(archive), 'HEAD'], cwd=root, check=True)
+    subprocess.run([sys.executable, str(root/'scripts/package_server.py'), '--output', str(base)], check=True)
+    archive = next(base.glob('remote-console-server-*.tar.gz'))
     def download(destination, release):
         manage.extract_source(archive, destination)
         value = {'release': release or 'v0.2.1', 'commit': ('a' if release != 'v0.2.2' else 'b')*40}
