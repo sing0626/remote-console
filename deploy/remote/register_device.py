@@ -65,12 +65,13 @@ def register(base, primary_key, device_id, name, key_path, compose_path, check_p
     registry_path = base/'devices.json'
     if registry_path.exists():
         cfg = json.loads(registry_path.read_text(encoding='utf-8'))
-        if cfg.get('version')!=1 or not cfg.get('devices') or cfg.get('default_device')!='primary':
+        if cfg.get('version')!=1 or not cfg.get('devices') or not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}',cfg.get('default_device','')):
             raise ValueError('Unknown device registry was preserved')
     else:
         raise ValueError('Initialize this deployment with initialize.py before registering another phone')
     ids = [item['id'] for item in cfg['devices']]
-    if len(set(ids))!=len(ids) or len(ids)>=32 and device_id not in ids:
+    primary_id=cfg['default_device']
+    if primary_id not in ids or device_id==primary_id or len(set(ids))!=len(ids) or len(ids)>=32 and device_id not in ids:
         raise ValueError('Invalid or full device registry was preserved')
     if compose_path.exists():
         existing = json.loads(compose_path.read_text(encoding='utf-8'))
@@ -96,7 +97,7 @@ def register(base, primary_key, device_id, name, key_path, compose_path, check_p
         tunnel_ports={int(setting((base/'frps.toml').read_text(encoding='utf-8'),'bindPort'))}
         proxy_ports={18079,18081}
         for item in cfg['devices']:
-            if item['id']=='primary':continue
+            if item['id']==primary_id:continue
             child=base/'devices'/item['id']
             tunnel_ports.add(int(setting((child/'frps.toml').read_text(encoding='utf-8'),'bindPort')))
             proxy_ports.add(int(setting((child/'phone-frpc.toml').read_text(encoding='utf-8'),'remotePort')))
@@ -135,7 +136,7 @@ remotePort = {proxy}
     services={}
     for item in cfg['devices']:
         ident=item['id']
-        if ident=='primary':continue
+        if ident==primary_id:continue
         if not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}',ident) or ident=='tunnel':
             raise ValueError('Invalid existing additional device ID')
         services['signaling-'+ident]={'build':{'context':'.','dockerfile':'frps.Dockerfile'},'restart':'unless-stopped','network_mode':'host','volumes':[f'./private/devices/{ident}/frps.toml:/etc/frp/frps.toml:ro','./private/pki:/pki:ro']}

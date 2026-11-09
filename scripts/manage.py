@@ -31,6 +31,7 @@ class Paths:
         self.config = root / 'etc/remote-console-generic/config.json'
         self.backups = root / 'var/backups/remote-console-generic'
         self.launcher = root / 'usr/local/bin/remote-console'
+        self.legacy = root / 'opt/remote-console'
 
 
 def write_json(path, value):
@@ -124,7 +125,83 @@ def download_source(destination, release=None):
     return {'release': release, 'commit': commit}
 
 
-def compose_document(source, data):
+def toml_setting(path, name):
+    values = re.findall(r'^'+re.escape(name)+r'\s*=\s*([^\r\n]+)', path.read_text(), re.M)
+    if len(values) != 1:
+        raise ValueError('設定缺少或重複：'+name)
+    return values[0].strip().strip('"')
+
+
+def identity_snapshot(data):
+    """Preserve durable identities; normal last-used timestamps may change on reconnect."""
+    result = {}
+    for path in data.rglob('*'):
+        if not path.is_file(): continue
+        relative = path.relative_to(data).as_posix()
+        if '.generated.' in path.name or relative in [MARKER, 'enrollment.pub']: continue
+        content = path.read_bytes()
+        if relative == 'controller-trust/controllers.json':
+            trust = json.loads(content)
+            for record in trust['controllers']:
+                record.pop('last_used_at', None)
+            trust['controllers'].sort(key=lambda item: item['id'])
+            content = json.dumps(trust, sort_keys=True).encode()
+        elif relative.startswith('controller-trust/.trust-'):
+            continue
+        result[relative] = hashlib.sha256(content).hexdigest()
+    return result
+
+
+def validate_legacy(legacy):
+    data = legacy/'private'
+    registry = json.loads((data/'devices.json').read_text())
+    phones = registry.get('devices', [])
+    default = registry.get('default_device')
+    ids = [phone['id'] for phone in phones]
+    if registry.get('version') != 1 or not 1 <= len(phones) <= 32 or len(ids) != len(set(ids)) or default not in ids:
+        raise ValueError('未知電話登記資料已保留')
+    extra = json.loads((legacy/'compose.devices.json').read_text())
+    expected = {'signaling-'+ident for ident in ids if ident != default}
+    if extra.get('x-remoteconsole-generated') != 1 or set(extra['services']) != expected:
+        raise ValueError('未知額外電話服務已保留')
+    for relative in ['frps.toml', 'turnserver.conf', 'phone-frpc.toml', 'ice.private.json',
+                     'pki/ca.crt', 'pki/server.crt', 'pki/server.key', 'controller-trust/controllers.json']:
+        if not (data/relative).is_file() or not (data/relative).stat().st_size:
+            raise ValueError('舊部署缺少必要設定：'+relative)
+    domain = toml_setting(data/'phone-frpc.toml', 'transport.tls.serverName')
+    ip = toml_setting(data/'phone-frpc.toml', 'serverAddr')
+    if not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?', domain) or '.' not in domain or not ipaddress.ip_address(ip).is_global or ':' in ip:
+        raise ValueError('未知舊入口設定已保留')
+    ports = set()
+    for phone in phones:
+        ident = phone['id']
+        if not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}', ident) or ident == 'tunnel':
+            raise ValueError('未知電話 ID 已保留')
+        primary = ident == default
+        private = '/private' if primary else '/private/devices/'+ident
+        key_ref = '/run/owner-enrollment.pub' if primary else private+'/enrollment.pub'
+        if phone.get('private') != private or phone.get('key') != key_ref:
+            raise ValueError('未知電話身份映射已保留')
+        profile = data if primary else data/'devices'/ident
+        key = legacy/'owner-enrollment.pub' if primary else profile/'enrollment.pub'
+        subprocess.run(['openssl', 'pkey', '-pubin', '-in', str(key), '-noout'], check=True, capture_output=True)
+        server, client = profile/'frps.toml', profile/'phone-frpc.toml'
+        tunnel = int(toml_setting(server, 'bindPort'))
+        proxy = int(toml_setting(client, 'remotePort'))
+        if not 1024 <= tunnel <= 65535 or not 1024 <= proxy <= 65535 or tunnel in ports or proxy in ports or tunnel == proxy:
+            raise ValueError('未知隧道埠設定已保留')
+        ports.update([tunnel, proxy])
+        if phone.get('upstream') != 'http://127.0.0.1:'+str(proxy) or toml_setting(client, 'serverPort') != str(tunnel) or toml_setting(server, 'auth.token') != toml_setting(client, 'auth.token'):
+            raise ValueError('電話隧道設定不一致，現有資料已保留')
+        for relative in ['ice.private.json', 'pki/ca.crt']:
+            if not (profile/relative).is_file(): raise ValueError('電話設定不完整：'+relative)
+    trust = json.loads((data/'controller-trust/controllers.json').read_text())
+    if trust.get('version') != 1 or not isinstance(trust.get('controllers'), list):
+        raise ValueError('未知控制端授權格式已保留')
+    return registry
+
+
+def compose_document(source, data, project=PROJECT, registry=None):
     build = str(source/'deploy/remote')
     def service(dockerfile, volumes, **more):
         return dict(build={'context': build, 'dockerfile': dockerfile}, restart='unless-stopped', network_mode='host', volumes=volumes, **more)
@@ -137,41 +214,51 @@ def compose_document(source, data):
                      command=['-c', '/etc/coturn/turnserver.conf'], volumes=[f'{data}/turnserver.conf:/etc/coturn/turnserver.conf:ro'])
     }
     extra = data/'compose.devices.generated.json'
-    if extra.exists():
-        registry = json.loads((data/'devices.json').read_text())
+    if registry is not None or extra.exists():
+        registry = registry or json.loads((data/'devices.json').read_text())
+        default = registry['default_device']
+        primary = next(item for item in registry['devices'] if item['id'] == default)
+        if primary['key'] == '/run/owner-enrollment.pub':
+            services['gateway']['volumes'].append(f'{data}/enrollment.pub:/run/owner-enrollment.pub:ro')
         # Reconstruct only registered secondary tunnels; do not execute arbitrary services from data.
         for phone in registry['devices']:
             ident = phone['id']
-            if ident == 'primary':
+            if ident == default:
                 continue
             if not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}', ident):
                 raise ValueError('無效裝置 ID')
             services['signaling-'+ident] = service('frps.Dockerfile', [f'{data}/devices/{ident}/frps.toml:/etc/frp/frps.toml:ro', f'{data}/pki:/pki:ro'])
-    return {'name': PROJECT, 'services': services}
+    return {'name': project, 'services': services}
 
 
 class Manager:
     def __init__(self, paths=None, downloader=download_source):
         self.p = paths or Paths()
         self.downloader = downloader
+        self.project = PROJECT
+        if self.p.config.exists():
+            cfg = json.loads(self.p.config.read_text())
+            if cfg.get('managed_by') == PROJECT and cfg.get('layout') == 'legacy-v0.1.14':
+                self.p.data = self.p.legacy/'private'
+                self.project = 'remote-console'
 
     def config(self):
         cfg = json.loads(self.p.config.read_text())
-        if cfg.get('managed_by') != PROJECT or cfg.get('schema') != 1 or not owned(self.p.source) or not owned(self.p.data):
+        if cfg.get('managed_by') != PROJECT or cfg.get('schema') != 1 or cfg.get('compose_project', PROJECT) != self.project or not owned(self.p.source) or not owned(self.p.data):
             raise ValueError('未知安裝或資料目錄；現有內容會保留')
         return cfg
 
     def compose(self, *args, source=None):
         source = source or self.p.source
         runtime = self.p.data/'compose.runtime.generated.json'
-        write_json(runtime, compose_document(source, self.p.data))
-        return subprocess.run(['docker', 'compose', '--project-name', PROJECT, '-f', str(runtime), *args], check=True)
+        write_json(runtime, compose_document(source, self.p.data, self.project))
+        return subprocess.run(['docker', 'compose', '--project-name', self.project, '-f', str(runtime), *args], check=True)
 
     def healthy(self):
         for attempt in range(30):
             try:
                 runtime = self.p.data/'compose.runtime.generated.json'
-                result = subprocess.run(['docker', 'compose', '--project-name', PROJECT, '-f', str(runtime), 'ps', '--all', '--format', 'json'],
+                result = subprocess.run(['docker', 'compose', '--project-name', self.project, '-f', str(runtime), 'ps', '--all', '--format', 'json'],
                                         check=True, capture_output=True, text=True)
                 output = result.stdout.strip()
                 rows = json.loads(output) if output.startswith('[') else [json.loads(line) for line in output.splitlines()]
@@ -212,6 +299,113 @@ class Manager:
         print('備份（含憑證，請妥善保存）：'+str(target))
         return target
 
+    def install_launcher(self):
+        self.p.launcher.parent.mkdir(parents=True, exist_ok=True)
+        self.p.launcher.write_text('#!/bin/sh\n# managed by remote-console-generic\nexec python3 /opt/remote-console-source/scripts/manage.py "$@"\n')
+        self.p.launcher.chmod(0o755)
+
+    def migrate(self, release=None):
+        """Adopt v0.1.14 in place: never initialize or rewrite phone/trust profiles."""
+        for path in [self.p.source, self.p.previous, self.p.config, self.p.data, self.p.launcher]:
+            if path.exists() or path.is_symlink():
+                raise ValueError('現有管理安裝已保留；已升級請用 remote-console update：'+str(path))
+        legacy = self.p.legacy
+        data = legacy/'private'
+        if legacy.is_symlink() or not legacy.is_dir() or (legacy/'installer.version').read_text().strip() != 'v0.1.14':
+            raise ValueError('只接受已知 v0.1.14 部署，未知安裝會保留')
+        # No symlinks, external configuration references, or unknown Docker services.
+        if any(path.is_symlink() for path in legacy.rglob('*')):
+            raise ValueError('舊部署含有連結；請先核對實際資料位置')
+        registry = validate_legacy(legacy)
+        expected = {'gateway', 'turn', 'signaling-tunnel'} | {'signaling-'+d['id'] for d in registry['devices'] if d['id'] != registry['default_device']}
+        def old_compose(*args, capture=False):
+            return subprocess.run(['docker', 'compose', '--project-name', 'remote-console', '-f', str(legacy/'compose.yml'), *args],
+                                  cwd=legacy, check=True, capture_output=capture, text=capture)
+        doc = json.loads(old_compose('config', '--format', 'json', capture=True).stdout)
+        if doc.get('name') != 'remote-console' or set(doc['services']) != expected:
+            raise ValueError('舊 Compose 專案或服務與已知結構不符，現有服務會保留')
+        for name, service in doc['services'].items():
+            if service.get('network_mode') != 'host':
+                raise ValueError('未知網絡設定已保留：'+name)
+            for volume in service.get('volumes', []):
+                if volume.get('type') != 'bind' or not Path(volume['source']).resolve().is_relative_to(legacy.resolve()):
+                    raise ValueError('未知外部資料掛載已保留：'+name)
+        ids = subprocess.run(['docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project=remote-console'], check=True, capture_output=True, text=True).stdout.split()
+        if not ids:
+            raise ValueError('未搵到現有 remote-console 容器；請先啟動舊部署')
+        containers = json.loads(subprocess.run(['docker', 'inspect', *ids], check=True, capture_output=True, text=True).stdout)
+        for item in containers:
+            labels = item['Config']['Labels']
+            if labels.get('com.docker.compose.service') not in expected or Path(labels.get('com.docker.compose.project.working_dir', '')).resolve() != legacy.resolve():
+                raise ValueError('同名 Docker 專案包含未知容器，現有服務會保留')
+        stage, version = self.stage(release)
+        if not (stage/'scripts/manage.py').is_file() or 'def migrate(' not in (stage/'scripts/manage.py').read_text():
+            remove_owned(stage)
+            raise ValueError('所選版本未支援舊部署升級')
+        old_data = self.p.data
+        self.p.data = data
+        self.project = 'remote-console'
+        added = [data/'enrollment.pub', data/'compose.devices.generated.json', data/'compose.runtime.generated.json', data/MARKER]
+        if any(path.exists() for path in added):
+            remove_owned(stage); self.p.data = old_data; self.project = PROJECT
+            raise ValueError('舊資料已有管理暫存檔案；請先檢查，現有服務已保留')
+        candidate = stage/'migration-compose.generated.json'
+        write_json(candidate, compose_document(stage, data, self.project, registry))
+        try:
+            subprocess.run(['docker', 'compose', '--project-name', self.project, '-f', str(candidate), 'build', '--pull'], check=True)
+        except BaseException:
+            remove_owned(stage); self.p.data = old_data; self.project = PROJECT
+            raise
+        # Pause only the gateway while taking the pre-migration trust snapshot.
+        # FRP/TURN are left running; no phone Root commands or re-enrollment needed.
+        stopped = False
+        try:
+            old_compose('stop', 'gateway'); stopped = True
+            self.p.backups.mkdir(parents=True, mode=0o700, exist_ok=True)
+            stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+            backup = self.p.backups/('legacy-v0.1.14-'+stamp+'.tar.gz')
+            with tarfile.open(backup, 'w:gz') as tar:
+                tar.add(legacy, arcname='remote-console')
+            backup.chmod(0o600)
+            backup.with_suffix('.sha256').write_text(hashlib.sha256(backup.read_bytes()).hexdigest()+'  '+backup.name+'\n')
+            print('舊部署完整備份：'+str(backup))
+            before = identity_snapshot(data)
+            shutil.copy2(legacy/'owner-enrollment.pub', data/'enrollment.pub')
+            (data/'enrollment.pub').chmod(0o600)
+            shutil.copy2(legacy/'compose.devices.json', data/'compose.devices.generated.json')
+            mark(data)
+            stage.rename(self.p.source)
+            cfg = dict(managed_by=PROJECT, schema=1, layout='legacy-v0.1.14', compose_project=self.project,
+                       domain=toml_setting(data/'phone-frpc.toml', 'transport.tls.serverName'),
+                       public_ip=toml_setting(data/'phone-frpc.toml', 'serverAddr'), **version)
+            write_json(self.p.config, cfg)
+            self.install_launcher()
+            self.compose('config', '--quiet')
+            self.compose('up', '-d', '--remove-orphans')
+            if not self.healthy():
+                raise RuntimeError('升級後服務未通過健康檢查')
+            if identity_snapshot(data) != before:
+                raise RuntimeError('電話或控制端身份核對失敗')
+        except BaseException as error:
+            if stopped:
+                # Rebuild the preserved original program, using original Compose/project/data.
+                # Never rewind the controller store: a concurrent revocation must stay revoked.
+                try:
+                    old_compose('up', '-d', '--build', '--remove-orphans')
+                except BaseException as recovery_error:
+                    raise RuntimeError('升級未完成，舊版恢復亦失敗；資料與備份已保留。請檢查 Docker 日誌。') from recovery_error
+            for path in added:
+                path.unlink(missing_ok=True)
+            if self.p.config.exists(): self.p.config.unlink()
+            if self.p.launcher.exists(): self.p.launcher.unlink()
+            for path in [stage, self.p.source]:
+                if path.exists(): remove_owned(path)
+            self.p.data = old_data; self.project = PROJECT
+            raise RuntimeError('升級未完成，已恢復原有服務；配對及授權資料保留。原因：'+str(error)) from error
+        print('已升級至 '+version['release']+' 並接入 remote-console 選單。原本電話 ID、配對及控制端授權保留。')
+        print('原始程式及 Compose 留喺 '+str(legacy)+'；電話資料沿用 '+str(data))
+        self.instructions(cfg)
+
     def install(self, domain, ip, key, release=None):
         for path in [self.p.source, self.p.previous, self.p.config, self.p.data, self.p.launcher]:
             if path.exists() or path.is_symlink():
@@ -243,9 +437,7 @@ class Manager:
             raise
         cfg = dict(managed_by=PROJECT, schema=1, domain=domain, public_ip=ip, **version)
         write_json(self.p.config, cfg)
-        self.p.launcher.parent.mkdir(parents=True, exist_ok=True)
-        self.p.launcher.write_text('#!/bin/sh\n# managed by remote-console-generic\nexec python3 /opt/remote-console-source/scripts/manage.py "$@"\n')
-        self.p.launcher.chmod(0o755)
+        self.install_launcher()
         try:
             self.compose('config', '--quiet')
             self.compose('up', '-d', '--build')
@@ -261,7 +453,10 @@ class Manager:
         print('用現有 HTTPS 反代 → http://127.0.0.1:18079；保留 Host / Origin 及 WebSocket。無需 Caddy。')
         print('放行 TCP 7000、TCP/UDP 3478、UDP 49160–49260；後端 18079/18081 不對外開放。')
         print('電話設定網址：https://'+cfg['domain'])
-        print('將此 HTTPS 網址寫入受控電話 Root 工作目錄 enrollment-url，然後重啟電話受控服務。')
+        if cfg.get('layout') == 'legacy-v0.1.14':
+            print('現有電話沿用原設定，毋須重新配對、改網址或重開電話。')
+        else:
+            print('將此 HTTPS 網址寫入受控電話 Root 工作目錄 enrollment-url，然後重啟電話受控服務。')
         print('首次控制端請喺電話批准一次，之後免 PIN；電話可撤銷。')
         print('管理選單：remote-console')
 
@@ -393,7 +588,7 @@ def lock(path):
 
 def main():
     parser = argparse.ArgumentParser(description='RemoteConsole 管理選單')
-    parser.add_argument('command', nargs='?', choices=['install', 'update', 'status', 'start', 'stop', 'restart', 'logs', 'add-device', 'backup', 'rollback', 'uninstall', 'info'])
+    parser.add_argument('command', nargs='?', choices=['install', 'migrate', 'update', 'status', 'start', 'stop', 'restart', 'logs', 'add-device', 'backup', 'rollback', 'uninstall', 'info'])
     parser.add_argument('--release', help='指定伺服器穩定版本；預設最新版本')
     parser.add_argument('--domain'); parser.add_argument('--public-ip'); parser.add_argument('--owner-key', type=Path)
     parser.add_argument('--id'); parser.add_argument('--name'); parser.add_argument('--public-key', type=Path)
@@ -408,6 +603,7 @@ def main():
         sys.stdin = open('/dev/tty')
     def execute(command):
         if command == 'install': wizard(manager, args)
+        elif command == 'migrate': manager.migrate(args.release)
         elif command == 'update': manager.update(args.release)
         elif command == 'backup': manager.backup()
         elif command == 'rollback': manager.rollback()

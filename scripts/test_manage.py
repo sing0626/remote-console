@@ -125,13 +125,32 @@ class Archive(unittest.TestCase):
     def test_secondary_phone_compose_uses_external_data_and_staged_source(self):
         with tempfile.TemporaryDirectory(prefix='remote-console-compose-test-') as temp:
             data = Path(temp).resolve()
-            manage.write_json(data/'devices.json', {'devices': [{'id': 'primary'}, {'id': 'secondary'}]})
+            manage.write_json(data/'devices.json', {'default_device': 'primary', 'devices': [{'id': 'primary', 'key': '/private/enrollment.pub'}, {'id': 'secondary'}]})
             manage.write_json(data/'compose.devices.generated.json', {'services': {}})
             source = data/'staged-source'
             doc = manage.compose_document(source, data)
             self.assertEqual(doc['name'], manage.PROJECT)
             self.assertEqual(doc['services']['signaling-secondary']['build']['context'], str(source/'deploy/remote'))
             self.assertIn(str(data)+'/controller-trust:/state', doc['services']['gateway']['volumes'])
+
+    def test_legacy_default_id_and_key_mount_are_preserved(self):
+        with tempfile.TemporaryDirectory(prefix='remote-console-legacy-compose-') as temp:
+            data = Path(temp).resolve()
+            registry = {'default_device': 'original-host', 'devices': [
+                {'id': 'original-host', 'key': '/run/owner-enrollment.pub'}, {'id': 'second-host'}]}
+            doc = manage.compose_document(data/'source', data, 'remote-console', registry)
+            self.assertEqual(doc['name'], 'remote-console')
+            self.assertIn('signaling-second-host', doc['services'])
+            self.assertNotIn('signaling-original-host', doc['services'])
+            self.assertIn(str(data)+'/enrollment.pub:/run/owner-enrollment.pub:ro', doc['services']['gateway']['volumes'])
+
+    def test_reload_adopted_installation_keeps_legacy_data_and_project(self):
+        with tempfile.TemporaryDirectory(prefix='remote-console-legacy-config-') as temp:
+            paths = manage.Paths(Path(temp).resolve())
+            manage.write_json(paths.config, {'managed_by': manage.PROJECT, 'layout': 'legacy-v0.1.14'})
+            manager = manage.Manager(paths)
+            self.assertEqual(manager.p.data, paths.legacy/'private')
+            self.assertEqual(manager.project, 'remote-console')
 
 
 if __name__ == '__main__': unittest.main()

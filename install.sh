@@ -9,6 +9,15 @@ fi
 for rc_existing in /opt/remote-console-source /var/lib/remote-console-generic /usr/local/bin/remote-console; do
   [[ ! -e "$rc_existing" && ! -L "$rc_existing" ]] || { printf '現有檔案已保留：%s\n' "$rc_existing" >&2; exit 1; }
 done
+if [[ "${1:-}" = migrate ]]; then
+  # Existing deployments already have dependencies. Never alter their system packages.
+  for rc_tool in curl python3 openssl docker; do command -v "$rc_tool" >/dev/null || { printf '缺少工具：%s\n' "$rc_tool" >&2; exit 1; }; done
+  rc_tmp=$(mktemp -d /tmp/remote-console-bootstrap.XXXXXXXX)
+  trap 'rm -rf -- "$rc_tmp"' EXIT
+  curl -fL --retry 3 https://raw.githubusercontent.com/sing0626/remote-console/main/scripts/manage.py -o "$rc_tmp/manage.py"
+  python3 "$rc_tmp/manage.py" "$@"
+  exit
+fi
 command -v apt-get >/dev/null || { printf '自動安裝依賴支援 Ubuntu / Debian；其他 Linux 請先安裝 Docker Compose、Python 3、curl、OpenSSL，然後執行 scripts/manage.py install。\n' >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
