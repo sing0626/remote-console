@@ -24,17 +24,10 @@ final class NativeSession: NSObject, ObservableObject {
     @Published var videoHeight = 2400
     @Published var approvalCode = ""
     @Published var approvalName = ""
+    private static let playback = RCPlaybackAudioDevice()
     private static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
-        let audio = RTCAudioSessionConfiguration.webRTC()
-        // The stock iOS WebRTC audio device requires an input/output session,
-        // even when the peer's audio transceiver is receive-only.
-        audio.category = AVAudioSession.Category.playAndRecord.rawValue
-        audio.categoryOptions.insert(.defaultToSpeaker)
-        audio.categoryOptions.insert(.mixWithOthers)
-        audio.mode = AVAudioSession.Mode.voiceChat.rawValue
-        RTCAudioSessionConfiguration.setWebRTC(audio)
-        return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(), decoderFactory: RTCDefaultVideoDecoderFactory())
+        return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(), decoderFactory: RTCDefaultVideoDecoderFactory(), audioDevice: playback)
     }()
     private var peer: RTCPeerConnection?
     private var ordered: RTCDataChannel?
@@ -91,22 +84,6 @@ final class NativeSession: NSObject, ObservableObject {
         }
         return result
     }
-    private func authorizeAudio() async throws {
-        guard let usage = Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") as? String,
-              !usage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw Failure.message("安裝版本缺少音訊權限說明，請更新遙控台後再連接。")
-        }
-        let allowed: Bool
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized: allowed = true
-        case .notDetermined: allowed = await AVCaptureDevice.requestAccess(for: .audio)
-        case .denied, .restricted: allowed = false
-        @unknown default: allowed = false
-        }
-        guard allowed else {
-            throw Failure.message("未允許麥克風權限，WebRTC 聲音引擎未能啟動。請到 iPhone 設定允許遙控台使用麥克風後，再重新連接。")
-        }
-    }
     private func request(_ path: String, json: [String: Any]? = nil) async throws -> [String: Any] {
         guard let origin = origin, let http = http, let url = URL(string: path, relativeTo: origin) else { throw Failure.message("連線已結束。") }
         var request = URLRequest(url: url)
@@ -155,8 +132,6 @@ final class NativeSession: NSObject, ObservableObject {
                 if let shared = sessions["stream_options"] as? [String: String], !shared.isEmpty { options = shared; requestedFPS = Int(shared["max_fps"] ?? "") ?? requestedFPS; notice = "已沿用其他連線嘅共用畫質。" } else { options = profile.options }
                 let ice = try await request("/api/ice-config")
                 guard generation == epoch else { return }
-                status = "等待音訊權限"
-                try await authorizeAudio()
                 guard generation == epoch else { return }
                 let config = RTCConfiguration(); config.sdpSemantics = .unifiedPlan
                 config.iceServers = (ice["iceServers"] as? [[String: Any]] ?? []).compactMap { item in
@@ -344,6 +319,7 @@ final class NativeSession: NSObject, ObservableObject {
         if fps == 0 { fps = max(0,(frames - previousFrames) / elapsed) }
         let rate = max(0,(bytes - previousBytes) * 8 / elapsed / 1_000_000)
         previousFrames = frames; previousBytes = bytes; previousTime = now
+        NSLog("RemoteAudio rendered=%llu nonSilent=%llu available=%d",Self.playback.renderedFrames,Self.playback.nonSilentFrames,Self.playback.outputAvailable ? 1 : 0)
         detail = String(format: "%@ · %.0f ms\n%.0f / %d FPS · %.1f Mbps",route,rtt,fps,requestedFPS,rate)
     }
 }

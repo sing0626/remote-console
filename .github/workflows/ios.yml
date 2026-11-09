@@ -1,0 +1,161 @@
+name: Verify iOS playback and trusted login
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        type: choice
+        options: [baseline, checked]
+        default: checked
+      test_scope:
+        type: string
+        default: all
+      publish_ipa:
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      label:
+        type: string
+        default: checked
+      test_scope:
+        type: string
+        default: all
+      publish_ipa:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  motion:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: clients/ios/fixture-requirements.txt
+      - name: Install local WebRTC fixture dependencies
+        run: python3 -m pip install -r clients/ios/fixture-requirements.txt
+      - name: Select Xcode with Liquid Glass SDK
+        run: |
+          XCODE_PATH=$(python3 -c 'import glob,pathlib; p=glob.glob("/Applications/Xcode_26*.app"); print(sorted(p,key=lambda s:tuple(int(x) for x in pathlib.Path(s).stem.split("_")[1].split(".")))[-1]+"/Contents/Developer")')
+          echo "DEVELOPER_DIR=$XCODE_PATH" >> "$GITHUB_ENV"
+      - uses: actions/cache/restore@v4
+        id: webrtc-cache
+        with:
+          path: clients/ios/build/SourcePackages
+          key: ios-webrtc-157-source-packages-v2
+      - name: Build UI tests and boot iPhone
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); keys=sorted([k for k in d["devices"] if ".iOS-" in k],key=lambda k:tuple(int(n) for n in k.split(".iOS-")[1].split("-")),reverse=True); print(next(v["udid"] for k in keys for v in d["devices"][k] if "iPhone" in v["name"]))')
+          echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl status_bar "$DEVICE_ID" override --time '9:41' --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          python3 clients/ios/generate_project.py
+          xcodebuild -project clients/ios/RemoteController.xcodeproj -scheme RemoteController -configuration Debug -sdk iphonesimulator -destination "id=$DEVICE_ID" -derivedDataPath clients/ios/build/motion -clonedSourcePackagesDirPath clients/ios/build/SourcePackages CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" -parallel-testing-enabled NO build-for-testing
+      - uses: actions/cache/save@v4
+        if: steps.webrtc-cache.outputs.cache-hit != 'true'
+        with:
+          path: clients/ios/build/SourcePackages
+          key: ios-webrtc-157-source-packages-v2
+      - name: Install app with microphone access denied
+        run: |
+          xcrun simctl install "$DEVICE_ID" clients/ios/build/motion/Build/Products/Debug-iphonesimulator/RemoteController.app
+          xcrun simctl privacy "$DEVICE_ID" revoke microphone lab.remote.controller
+      - name: Start loopback WebRTC fixture
+        run: |
+          mkdir -p clients/ios/build/motion/capture
+          python3 -u clients/ios/webrtc_fixture.py > clients/ios/build/motion/capture/fixture.log 2>&1 &
+          python3 - <<'PY'
+          import time,urllib.request
+          for attempt in range(30):
+              try:
+                  urllib.request.urlopen('http://127.0.0.1:18741/health',timeout=1).close()
+                  break
+              except OSError:
+                  if attempt==29: raise
+                  time.sleep(1)
+          PY
+      - name: Record real UI and native connection interactions
+        id: uitests
+        env:
+          TEST_SCOPE: ${{ inputs.test_scope }}
+        run: |
+          mkdir -p clients/ios/build/motion/capture
+          TEST_FILTER=()
+          if [ "$TEST_SCOPE" = authorization ]; then
+            TEST_FILTER=(-only-testing:RemoteControllerUITests/MotionUITests/test05PlaybackWorksWithoutMicrophonePermission -only-testing:RemoteControllerUITests/MotionUITests/test06AuthorizedNativeMediaAndReconnect)
+          fi
+          set +e
+          xcodebuild -project clients/ios/RemoteController.xcodeproj -scheme RemoteController -configuration Debug -sdk iphonesimulator -destination "id=$DEVICE_ID" -derivedDataPath clients/ios/build/motion -clonedSourcePackagesDirPath clients/ios/build/SourcePackages CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" -parallel-testing-enabled NO -resultBundlePath clients/ios/build/motion/results.xcresult "${TEST_FILTER[@]}" test-without-building
+          TEST_EXIT=$?
+          sleep 2
+          curl --fail http://127.0.0.1:18741/metrics -o clients/ios/build/motion/capture/fixture-metrics.json
+          if [ "$TEST_EXIT" = 0 ] && [ "$TEST_SCOPE" != authorization ]; then
+            python3 - <<'PY'
+          import json
+          d=json.load(open('clients/ios/build/motion/capture/fixture-metrics.json'))
+          assert d['connected'] >= 7 and d['controlPackets'] >= 4 and d['outboundAudioBytes'] > 0 and d['outboundVideoBytes'] > 0,d
+          assert d['connectionsByDevice'].get('fixture-a',0) >= 1 and d['connectionsByDevice'].get('fixture-b',0) >= 1,d
+          assert d['approvalRequests'] >= 3 and d['credentialSessions'] >= 3,d
+          PY
+            if [ "$?" != 0 ]; then TEST_EXIT=1; fi
+          fi
+          echo "$TEST_EXIT" > clients/ios/build/motion/capture/test-exit.txt
+          exit "$TEST_EXIT"
+      - name: Collect simulator crash diagnostics
+        if: always()
+        run: |
+          mkdir -p clients/ios/build/motion/capture/crashes
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          out=Path('clients/ios/build/motion/capture/crashes')
+          roots=[Path.home()/'Library/Logs/DiagnosticReports',Path.home()/'Library/Developer/CoreSimulator/Devices']
+          for root in roots:
+              if root.exists():
+                  for pattern in ['RemoteController*.ips','RemoteController*.crash']:
+                      for item in root.rglob(pattern):
+                          if item.is_file():
+                              target=out/item.name
+                              if target.exists(): target=out/(str(len(list(out.iterdir())))+'-'+item.name)
+                              shutil.copy2(item,target)
+          PY
+          xcrun simctl spawn "$DEVICE_ID" log show --last 40m --style compact --predicate 'process == "RemoteController"' > clients/ios/build/motion/capture/simulator-console.log 2>&1 || true
+      - name: Export motion evidence
+        if: always()
+        run: |
+          if [ -d clients/ios/build/motion/results.xcresult ]; then
+            xcrun xcresulttool get test-results summary --path clients/ios/build/motion/results.xcresult > clients/ios/build/motion/capture/test-summary.json
+            xcrun xcresulttool export attachments --path clients/ios/build/motion/results.xcresult --output-path clients/ios/build/motion/attachments || true
+          fi
+      - name: Verify received PCM was rendered
+        if: success()
+        run: |
+          python3 - <<'PY'
+          import pathlib,re
+          text=pathlib.Path('clients/ios/build/motion/capture/simulator-console.log').read_text(errors='replace')
+          values=re.findall(r'RemoteAudio rendered=(\d+) nonSilent=(\d+) available=(\d+)',text)
+          assert any(int(frames)>0 and int(sound)>0 and active=='1' for frames,sound,active in values),'No non-silent received PCM reached the playback queue'
+          PY
+      - name: Build updated unsigned IPA
+        if: success() && inputs.publish_ipa && inputs.test_scope != 'authorization'
+        run: bash clients/ios/build_unsigned.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iOS-motion-evidence
+          path: |
+            clients/ios/build/motion/capture/test-summary.json
+            clients/ios/build/motion/capture/simulator-console.log
+            clients/ios/build/motion/capture/crashes/
+            clients/ios/build/motion/capture/test-exit.txt
+            clients/ios/build/motion/capture/fixture.log
+            clients/ios/build/motion/capture/fixture-metrics.json
+            clients/ios/build/motion/attachments/
+            clients/ios/build/RemoteController-unsigned.ipa
+          if-no-files-found: warn

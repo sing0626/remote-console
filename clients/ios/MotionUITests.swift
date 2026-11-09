@@ -35,12 +35,6 @@ final class MotionUITests: XCTestCase {
         if app.keyboards.firstMatch.exists { tap("home.dismissKeyboard") }
         tap("home.connect")
     }
-    private func microphone(_ allow: Bool) {
-        let alert = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 15), "Microphone authorization must be requested before the native audio engine starts")
-        let button = alert.buttons.element(boundBy: allow ? 1 : 0)
-        XCTAssertTrue(button.exists); button.tap()
-    }
     func test01HomeSettingsAndAdvanced() {
         app.launchArguments = []; app.launch()
         tap("home.settings"); title("畫質與連線"); shot("home-settings")
@@ -81,25 +75,20 @@ final class MotionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["session.tools"].isHittable)
         tap("session.tools"); title("遙控工具"); tap("panel.close")
     }
-    func test05DeniedMicrophoneDoesNotCrash() {
-        app.terminate()
-        app.resetAuthorizationStatus(for: .microphone)
-        app.launchArguments = []; app.launch(); connectFixture(); microphone(false)
-        let status = app.staticTexts["session.status"]
-        let denied = NSPredicate(format: "label CONTAINS %@", "未允許麥克風權限")
-        expectation(for: denied, evaluatedWith: status)
-        waitForExpectations(timeout: 10)
-        XCTAssertEqual(app.state, .runningForeground); shot("microphone-denied-no-crash")
-        app.buttons["電話清單"].tap()
-        XCTAssertTrue(app.buttons["home.connect"].waitForExistence(timeout: 6))
+    func test05PlaybackWorksWithoutMicrophonePermission() {
+        app.terminate(); app.launchArguments = []; app.launch(); connectFixture()
+        expectation(for: NSPredicate(format: "label == %@", "已連接 · 可操作"), evaluatedWith: app.staticTexts["session.status"])
+        waitForExpectations(timeout: 45)
+        XCTAssertFalse(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch.exists)
+        XCTAssertEqual(app.state, .runningForeground); shot("playback-no-microphone-required")
+        tap("session.tools"); tap("tools.disconnect")
+        XCTAssertTrue(app.buttons["home.connect"].waitForExistence(timeout: 8))
     }
     func test06AuthorizedNativeMediaAndReconnect() {
         app.terminate()
-        app.resetAuthorizationStatus(for: .microphone)
         app.launchArguments = []; app.launch()
         for round in 0..<2 {
             connectFixture()
-            if round == 0 { microphone(true) }
             let status = app.staticTexts["session.status"]
             expectation(for: NSPredicate(format: "label == %@", "已連接 · 可操作"), evaluatedWith: status)
             waitForExpectations(timeout: 45)
@@ -108,7 +97,7 @@ final class MotionUITests: XCTestCase {
             expectation(for: decoding, evaluatedWith: detail); waitForExpectations(timeout: 20)
             tap("session.home")
             app.buttons["開聲"].tap()
-            XCTAssertTrue(app.buttons["靜音"].waitForExistence(timeout: 6)); shot("native-media-connected-\(round)")
+            XCTAssertTrue(app.buttons["靜音"].waitForExistence(timeout: 6)); Thread.sleep(forTimeInterval: 2); shot("native-media-connected-\(round)")
             app.buttons["靜音"].tap()
             tap("session.tools"); tap("tools.disconnect")
             XCTAssertTrue(app.buttons["home.connect"].waitForExistence(timeout: 8))

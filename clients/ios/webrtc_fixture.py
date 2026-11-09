@@ -3,6 +3,8 @@ import asyncio
 import json
 import logging
 import secrets
+import math
+import array
 
 from aiohttp import web
 from aiortc import AudioStreamTrack, RTCConfiguration, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
@@ -19,6 +21,14 @@ class Pattern(VideoStreamTrack):
         frame.pts, frame.time_base = pts, time_base
         return frame
 
+
+class Tone(AudioStreamTrack):
+    async def recv(self):
+        frame = await super().recv()
+        samples = array.array('h', (int(5000 * math.sin(2 * math.pi * 440 * ((frame.pts or 0) + i) / frame.sample_rate)) for i in range(frame.samples)))
+        raw = samples.tobytes()
+        frame.planes[0].update(raw + bytes(frame.planes[0].buffer_size - len(raw)))
+        return frame
 
 peers = set()
 trust_states = {18741: {"requests": {}, "credentials": {}}, 18742: {"requests": {}, "credentials": {}}}
@@ -139,7 +149,7 @@ async def socket(request):
         metrics["offers"] += 1
         await pc.setRemoteDescription(RTCSessionDescription(sdp=offer["sdp"], type="offer"))
         pc.addTrack(Pattern())
-        pc.addTrack(AudioStreamTrack())
+        pc.addTrack(Tone())
         await pc.setLocalDescription(await pc.createAnswer())
         print(json.dumps({"device":device_id,"answerCandidates":[line for line in pc.localDescription.sdp.splitlines() if line.startswith("a=candidate:")]}),flush=True)
         await ws.send_json({"stage": "webrtc_init", "sdp": pc.localDescription.sdp})
