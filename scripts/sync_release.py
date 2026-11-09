@@ -30,6 +30,14 @@ installer_path=root/'install.sh'
 installer,count=re.subn(r'^rc_release=v\d+\.\d+\.\d+', 'rc_release=v'+version, installer_path.read_text(encoding='utf-8'), flags=re.M)
 if count != 1:raise SystemExit('Missing bootstrap release pin')
 outputs[installer_path]=installer.encode()
+relay_path=root/'scripts/relay.py'
+relay,count=re.subn(r"^VERSION = '[^']+'", f"VERSION = '{version}'", relay_path.read_text(encoding='utf-8'), flags=re.M)
+if count != 1: raise SystemExit('Missing relay release constant')
+outputs[relay_path]=relay.encode()
+relay_installer_path=root/'relay-install.sh'
+relay_installer,count=re.subn(r'^rc_release=v\d+\.\d+\.\d+', 'rc_release=v'+version, relay_installer_path.read_text(encoding='utf-8'), flags=re.M)
+if count != 1: raise SystemExit('Missing relay bootstrap release pin')
+outputs[relay_installer_path]=relay_installer.encode()
 for path, content in outputs.items():
     if args.check:
         if not path.is_file() or path.read_bytes() != content: raise SystemExit('Stale release output: '+str(path.relative_to(root)))

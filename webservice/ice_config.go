@@ -34,7 +34,7 @@ func ReadICEConfiguration(path string) (*ICEConfiguration, error) {
 }
 
 func ParseICEConfiguration(data []byte) (*ICEConfiguration, error) {
-	c := &ICEConfiguration{}
+	c := &ICEConfiguration{STUN: []string{"stun:stun.l.google.com:19302"}}
 	if err := json.Unmarshal(data, c); err != nil {
 		return nil, err
 	}

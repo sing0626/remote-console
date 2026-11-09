@@ -14,7 +14,7 @@ args = p.parse_args()
 release = json.loads((root/'release.json').read_text(encoding='utf-8'))
 version = 'v'+release['version']
 tracked = subprocess.check_output(['git', '-c', 'safe.directory='+str(root), 'ls-files', '-z'], cwd=root).decode().split('\0')
-allowed = {'scripts/manage.py', 'release.json', 'install.sh', 'LICENSE', 'NOTICE.md', 'README.md'}
+allowed = {'scripts/manage.py', 'scripts/relay.py', 'release.json', 'install.sh', 'relay-install.sh', 'LICENSE', 'NOTICE.md', 'README.md'}
 files = sorted(name for name in tracked if name and (name in allowed or name.startswith('deploy/remote/')))
 for name in files:
     path = Path(name)
