@@ -522,8 +522,12 @@ def traffic(args):
         return {'rx': 0, 'tx': 0}
     print('半雲電話 · 香港中繼流量（Asia/Hong_Kong）')
     print('網卡：'+value['interface']+'；整張網卡入／出流量，包含 SSH 等其他連線。')
+    def size(number):
+        for unit, scale in [('GB', 1e9), ('MB', 1e6), ('kB', 1e3)]:
+            if number >= scale: return f'{number/scale:.2f} {unit}'
+        return str(number)+' B'
     for label, item in [('今日', period('day')), ('本月', period('month')), ('開始統計至今', stats['total'])]:
-        print(f"{label}：入 {item['rx']/1e9:.3f} GB　出 {item['tx']/1e9:.3f} GB　合計 {(item['rx']+item['tx'])/1e9:.3f} GB")
+        print(f"{label}：入 {size(item['rx'])}　出 {size(item['tx'])}　合計 {size(item['rx']+item['tx'])}")
     if value.get('quota_gb'):
         month = period('month'); used = month['tx']+(month['rx'] if value['count'] == 'total' else 0)
         print(f"每月參考額度：{used/1e9:.2f} / {value['quota_gb']} GB（{'雙向' if value['count']=='total' else '出站'}，{used/(value['quota_gb']*1e9)*100:.1f}%）")
