@@ -42,11 +42,6 @@ jobs:
         run: |
           XCODE_PATH=$(python3 -c 'import glob,pathlib; p=glob.glob("/Applications/Xcode_26*.app"); print(sorted(p,key=lambda s:tuple(int(x) for x in pathlib.Path(s).stem.split("_")[1].split(".")))[-1]+"/Contents/Developer")')
           echo "DEVELOPER_DIR=$XCODE_PATH" >> "$GITHUB_ENV"
-      - uses: actions/cache/restore@v4
-        id: webrtc-cache
-        with:
-          path: clients/ios/build/SourcePackages
-          key: ios-webrtc-157-source-packages-v2
       - name: Build UI tests and boot iPhone
         run: |
           DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); keys=sorted([k for k in d["devices"] if ".iOS-" in k],key=lambda k:tuple(int(n) for n in k.split(".iOS-")[1].split("-")),reverse=True); print(next(v["udid"] for k in keys for v in d["devices"][k] if "iPhone" in v["name"]))')
@@ -55,13 +50,9 @@ jobs:
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
           xcrun simctl status_bar "$DEVICE_ID" override --time '9:41' --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm/artifacts" clients/ios/build/SourcePackages/artifacts
           python3 clients/ios/generate_project.py
           xcodebuild -project clients/ios/RemoteController.xcodeproj -scheme RemoteController -configuration Debug -sdk iphonesimulator -destination "id=$DEVICE_ID" -derivedDataPath clients/ios/build/motion -clonedSourcePackagesDirPath clients/ios/build/SourcePackages CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" -parallel-testing-enabled NO build-for-testing
-      - uses: actions/cache/save@v4
-        if: steps.webrtc-cache.outputs.cache-hit != 'true'
-        with:
-          path: clients/ios/build/SourcePackages
-          key: ios-webrtc-157-source-packages-v2
       - name: Install app with microphone access denied
         run: |
           xcrun simctl install "$DEVICE_ID" clients/ios/build/motion/Build/Products/Debug-iphonesimulator/RemoteController.app
