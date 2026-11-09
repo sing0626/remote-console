@@ -361,7 +361,7 @@ struct ConsoleRoot: View {
             }.clipShape(RoundedRectangle(cornerRadius: fullscreen ? 0 : 22)).overlay(RoundedRectangle(cornerRadius: fullscreen ? 0 : 22).stroke(.white.opacity(0.08),lineWidth: 0.7))
             HStack(spacing: 7) {
                 Image(systemName: "waveform.path").foregroundColor(ConsoleColor.mint)
-                Text(session.detail).lineLimit(1).minimumScaleFactor(0.75).accessibilityIdentifier("session.detail")
+                Text(session.detail.replacingOccurrences(of: "\n", with: " · ")).lineLimit(1).minimumScaleFactor(0.75).layoutPriority(1).accessibilityIdentifier("session.detail")
                 Spacer(minLength: 0)
             }.font(.system(size: 9,design: .monospaced)).monospacedDigit().foregroundColor(ConsoleColor.muted).frame(height: 14).padding(.horizontal,12).padding(.vertical,2)
             if !session.notice.isEmpty { Text(session.notice).font(.system(size: 11)).foregroundColor(ConsoleColor.muted).padding(.horizontal,10) }
