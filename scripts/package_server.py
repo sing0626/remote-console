@@ -11,7 +11,7 @@ root = Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--output', type=Path, default=root/'dist')
 args = p.parse_args()
-release = json.loads((root/'release.json').read_text())
+release = json.loads((root/'release.json').read_text(encoding='utf-8'))
 version = 'v'+release['version']
 tracked = subprocess.check_output(['git', '-c', 'safe.directory='+str(root), 'ls-files', '-z'], cwd=root).decode().split('\0')
 allowed = {'scripts/manage.py', 'release.json', 'install.sh', 'LICENSE', 'NOTICE.md', 'README.md'}

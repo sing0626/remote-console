@@ -9,8 +9,8 @@ root = Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--check', action='store_true')
 args = p.parse_args()
-release = json.loads((root/'release.json').read_text())
-brand = json.loads((root/'branding/brand.json').read_text())
+release = json.loads((root/'release.json').read_text(encoding='utf-8'))
+brand = json.loads((root/'branding/brand.json').read_text(encoding='utf-8'))
 version, build = release['version'], release['build']
 if not re.fullmatch(r'\d+\.\d+\.\d+', version) or not isinstance(build, int) or build <= 1022:
     raise SystemExit('Invalid release identity')
@@ -23,11 +23,11 @@ info = plistlib.loads(info_path.read_bytes())
 info.update(CFBundleShortVersionString=version, CFBundleVersion=str(build), CFBundleDisplayName=brand['name'])
 outputs[info_path] = plistlib.dumps(info, sort_keys=False)
 manager_path = root/'scripts/manage.py'
-manager, count = re.subn(r"^SUITE_VERSION = '[^']+'", f"SUITE_VERSION = '{version}'", manager_path.read_text(), flags=re.M)
+manager, count = re.subn(r"^SUITE_VERSION = '[^']+'", f"SUITE_VERSION = '{version}'", manager_path.read_text(encoding='utf-8'), flags=re.M)
 if count != 1: raise SystemExit('Missing standalone manager release constant')
 outputs[manager_path] = manager.encode()
 installer_path=root/'install.sh'
-installer,count=re.subn(r'^rc_release=v\d+\.\d+\.\d+', 'rc_release=v'+version, installer_path.read_text(), flags=re.M)
+installer,count=re.subn(r'^rc_release=v\d+\.\d+\.\d+', 'rc_release=v'+version, installer_path.read_text(encoding='utf-8'), flags=re.M)
 if count != 1:raise SystemExit('Missing bootstrap release pin')
 outputs[installer_path]=installer.encode()
 for path, content in outputs.items():

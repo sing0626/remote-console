@@ -54,7 +54,7 @@ def owned(path):
     if path.is_symlink():
         return False
     try:
-        item = json.loads((path / MARKER).read_text())
+        item = json.loads((path / MARKER).read_text(encoding='utf-8'))
         return item['managed_by'] == PROJECT and item['schema'] == 1
     except (OSError, ValueError, KeyError):
         return False
@@ -156,7 +156,7 @@ def download_source(destination, release=None):
 
 
 def toml_setting(path, name):
-    values = re.findall(r'^'+re.escape(name)+r'\s*=\s*([^\r\n]+)', path.read_text(), re.M)
+    values = re.findall(r'^'+re.escape(name)+r'\s*=\s*([^\r\n]+)', path.read_text(encoding='utf-8'), re.M)
     if len(values) != 1:
         raise ValueError('設定缺少或重複：'+name)
     return values[0].strip().strip('"')
@@ -183,13 +183,13 @@ def identity_snapshot(data):
 
 def validate_legacy(legacy):
     data = legacy/'private'
-    registry = json.loads((data/'devices.json').read_text())
+    registry = json.loads((data/'devices.json').read_text(encoding='utf-8'))
     phones = registry.get('devices', [])
     default = registry.get('default_device')
     ids = [phone['id'] for phone in phones]
     if registry.get('version') != 1 or not 1 <= len(phones) <= 32 or len(ids) != len(set(ids)) or default not in ids:
         raise ValueError('未知電話登記資料已保留')
-    extra = json.loads((legacy/'compose.devices.json').read_text())
+    extra = json.loads((legacy/'compose.devices.json').read_text(encoding='utf-8'))
     expected = {'signaling-'+ident for ident in ids if ident != default}
     if extra.get('x-remoteconsole-generated') != 1 or set(extra['services']) != expected:
         raise ValueError('未知額外電話服務已保留')
@@ -224,7 +224,7 @@ def validate_legacy(legacy):
             raise ValueError('電話隧道設定不一致，現有資料已保留')
         for relative in ['ice.private.json', 'pki/ca.crt']:
             if not (profile/relative).is_file(): raise ValueError('電話設定不完整：'+relative)
-    trust = json.loads((data/'controller-trust/controllers.json').read_text())
+    trust = json.loads((data/'controller-trust/controllers.json').read_text(encoding='utf-8'))
     if trust.get('version') != 1 or not isinstance(trust.get('controllers'), list):
         raise ValueError('未知控制端授權格式已保留')
     return registry
@@ -244,7 +244,7 @@ def compose_document(source, data, project=PROJECT, registry=None):
     }
     extra = data/'compose.devices.generated.json'
     if registry is not None or extra.exists():
-        registry = registry or json.loads((data/'devices.json').read_text())
+        registry = registry or json.loads((data/'devices.json').read_text(encoding='utf-8'))
         default = registry['default_device']
         primary = next(item for item in registry['devices'] if item['id'] == default)
         if primary['key'] == '/run/owner-enrollment.pub':
@@ -266,13 +266,13 @@ class Manager:
         self.downloader = downloader
         self.project = PROJECT
         if self.p.config.exists():
-            cfg = json.loads(self.p.config.read_text())
+            cfg = json.loads(self.p.config.read_text(encoding='utf-8'))
             if cfg.get('managed_by') == PROJECT and cfg.get('layout') == 'legacy-v0.1.14':
                 self.p.data = self.p.legacy/'private'
                 self.project = 'remote-console'
 
     def config(self):
-        cfg = json.loads(self.p.config.read_text())
+        cfg = json.loads(self.p.config.read_text(encoding='utf-8'))
         if cfg.get('managed_by') != PROJECT or cfg.get('schema') != 1 or cfg.get('compose_project', PROJECT) != self.project or not owned(self.p.source) or not owned(self.p.data):
             raise ValueError('未知安裝或資料目錄；現有內容會保留')
         return cfg
@@ -340,7 +340,7 @@ class Manager:
                 raise ValueError('現有管理安裝已保留；已升級請用 remote-console update：'+str(path))
         legacy = self.p.legacy
         data = legacy/'private'
-        if legacy.is_symlink() or not legacy.is_dir() or (legacy/'installer.version').read_text().strip() != 'v0.1.14':
+        if legacy.is_symlink() or not legacy.is_dir() or (legacy/'installer.version').read_text(encoding='utf-8').strip() != 'v0.1.14':
             raise ValueError('只接受已知 v0.1.14 部署，未知安裝會保留')
         # No symlinks, external configuration references, or unknown Docker services.
         if any(path.is_symlink() for path in legacy.rglob('*')):
@@ -368,7 +368,7 @@ class Manager:
             if labels.get('com.docker.compose.service') not in expected or Path(labels.get('com.docker.compose.project.working_dir', '')).resolve() != legacy.resolve():
                 raise ValueError('同名 Docker 專案包含未知容器，現有服務會保留')
         stage, version = self.stage(release)
-        if not (stage/'scripts/manage.py').is_file() or 'def migrate(' not in (stage/'scripts/manage.py').read_text():
+        if not (stage/'scripts/manage.py').is_file() or 'def migrate(' not in (stage/'scripts/manage.py').read_text(encoding='utf-8'):
             remove_owned(stage)
             raise ValueError('所選版本未支援舊部署升級')
         old_data = self.p.data
@@ -551,7 +551,7 @@ class Manager:
             self.p.source.rename(stage); self.p.previous.rename(self.p.source); stage.rename(self.p.previous)
             self.compose('up', '-d', '--build', '--remove-orphans')
             raise
-        version = json.loads((self.p.source/MARKER).read_text())
+        version = json.loads((self.p.source/MARKER).read_text(encoding='utf-8'))
         write_json(self.p.config, dict(cfg, release=version['release'], commit=version['commit']))
         print('已還原至 '+version['release']+'；保留目前授權資料。')
 
@@ -572,7 +572,7 @@ class Manager:
         for path in [self.p.source, self.p.data, self.p.previous]:
             if path.exists() and not owned(path):
                 raise ValueError('未知目錄已保留：'+str(path))
-        if self.p.launcher.is_symlink() or (self.p.launcher.exists() and 'managed by '+PROJECT not in self.p.launcher.read_text()):
+        if self.p.launcher.is_symlink() or (self.p.launcher.exists() and 'managed by '+PROJECT not in self.p.launcher.read_text(encoding='utf-8')):
             raise ValueError('未知管理指令已保留')
         self.backup()
         self.compose('down', '--remove-orphans')

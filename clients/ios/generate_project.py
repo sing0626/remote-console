@@ -4,8 +4,8 @@ import plistlib,json
 
 root=Path(__file__).resolve().parent
 info=plistlib.loads((root/'Info.plist').read_bytes())
-release=json.loads((root.parents[1]/'release.json').read_text())
-brand=json.loads((root.parents[1]/'branding/brand.json').read_text())
+release=json.loads((root.parents[1]/'release.json').read_text(encoding='utf-8'))
+brand=json.loads((root.parents[1]/'branding/brand.json').read_text(encoding='utf-8'))
 info['CFBundleShortVersionString']=release['version']
 info['CFBundleVersion']=str(release['build'])
 info['CFBundleDisplayName']=brand['name']

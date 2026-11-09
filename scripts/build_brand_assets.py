@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 
 root=Path(__file__).resolve().parents[1]
-brand=json.loads((root/'branding/brand.json').read_text())
+brand=json.loads((root/'branding/brand.json').read_text(encoding='utf-8'))
 master=root/'branding/icon-1024.png'
 image=Image.open(master).convert('RGB')
 if image.size!=(1024,1024):raise SystemExit('The brand master must be 1024 x 1024')

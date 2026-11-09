@@ -8,8 +8,8 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 root=Path(__file__).resolve().parents[1]
-brand=json.loads((root/'branding/brand.json').read_text())
-release=json.loads((root/'release.json').read_text())
+brand=json.loads((root/'branding/brand.json').read_text(encoding='utf-8'))
+release=json.loads((root/'release.json').read_text(encoding='utf-8'))
 subprocess.run(['python3' if __import__('os').name!='nt' else 'python',str(root/'scripts/sync_release.py'),'--check'],check=True)
 icon=(root/'branding/icon.svg').read_bytes()
 for name in ['public/static/logo.svg','deploy/remote/gateway/releaseinfo/icon.svg']:
@@ -21,7 +21,7 @@ for density in ['mdpi','hdpi','xhdpi','xxhdpi','xxxhdpi']:
 for module,label in [('app','host_label'),('controller','controller_label')]:
     values={e.attrib['name']:e.text for e in ET.parse(root/f'{module}/src/main/res/values/brand.xml').getroot()}
     assert values['suite_name']==brand['name'] and values['app_name']==brand[label]
-    gradle=(root/f'{module}/build.gradle.kts').read_text()
+    gradle=(root/f'{module}/build.gradle.kts').read_text(encoding='utf-8')
     assert 'versionName = rootProject.extra["suiteVersion"] as String' in gradle
     assert 'versionCode = rootProject.extra["suiteBuild"] as Int' in gradle
 info=plistlib.loads((root/'clients/ios/Info.plist').read_bytes())
