@@ -139,6 +139,7 @@ def identity_snapshot(data):
         if not path.is_file(): continue
         relative = path.relative_to(data).as_posix()
         if '.generated.' in path.name or relative in [MARKER, 'enrollment.pub']: continue
+        if relative.startswith('controller-trust/.trust-'): continue
         content = path.read_bytes()
         if relative == 'controller-trust/controllers.json':
             trust = json.loads(content)
@@ -146,8 +147,6 @@ def identity_snapshot(data):
                 record.pop('last_used_at', None)
             trust['controllers'].sort(key=lambda item: item['id'])
             content = json.dumps(trust, sort_keys=True).encode()
-        elif relative.startswith('controller-trust/.trust-'):
-            continue
         result[relative] = hashlib.sha256(content).hexdigest()
     return result
 

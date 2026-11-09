@@ -78,6 +78,21 @@ bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/main
 
 通用安裝器只管理自己標記的部署；遇到其他既有安裝、未知目錄或相同 port 會停止並保留現有內容。需要 HTTPS 反代與防火牆設定，安裝後會列出要求；不會安裝 Caddy 或佔用 80/443。手動部署仍可沿用上面的 `initialize.py`／Compose 流程，但不會自動納入管理選單。
 
+### 舊版 v0.1.14 升級至管理選單
+
+如果目前使用舊安裝器的 `/opt/remote-console`、`remote-console` Docker 專案及 v0.1.14，請使用遷移命令，毋須重新輸入域名、公鑰或電話 PIN：
+
+```bash
+# 以 root 執行；先備份，切換時會短暫重啟服務。
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.2.1/install.sh) migrate --release v0.2.1
+remote-console status
+remote-console
+```
+
+遷移前核對安裝版本、容器歸屬、電話登記資料及隧道設定；先建置新版，再停止 gateway 取得完整舊部署備份。沿用 `/opt/remote-console/private` 及原本 Docker 專案，不改電話 ID、名稱、隧道 token、TURN secret、證書、電話設定內的路徑或控制端憑證。原始碼另外放在 `/opt/remote-console-source`，原有程式及 Compose 保留在 `/opt/remote-console`。備份放在 `/var/backups/remote-console-generic/legacy-v0.1.14-*.tar.gz`，權限 0600；請自行妥善保存。
+
+啟動或身份核對失敗會嘗試恢復原有程式服務，不會用舊備份覆蓋目前授權紀錄，避免已撤銷的控制端復活。升級完成後可用 `remote-console update` 更新；新增電話仍沿用同一網址。現有電話會自行重連，不需要重新配對、改 DNS、反代或防火牆。只接受已知 v0.1.14 結構；遇到其他版本、未知服務或額外資料掛載會停止，保留現有部署供核對。
+
 ## 檢查公開內容
 
 ```bash

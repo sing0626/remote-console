@@ -21,16 +21,21 @@ with tempfile.TemporaryDirectory(prefix='remote-console-legacy-docker-') as temp
         if source.is_dir(): shutil.copytree(source, target)
         else: shutil.copy2(source, target)
     (legacy/'installer.version').write_text('v0.1.14\n')
-    key = base/'phone.key'
     public = legacy/'owner-enrollment.pub'
-    subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-out', str(key)], check=True, capture_output=True)
-    subprocess.run(['openssl', 'pkey', '-in', str(key), '-pubout', '-out', str(public)], check=True, capture_output=True)
+    def create_key(name, target):
+        key = base/(name+'.key')
+        subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:3072', '-out', str(key)], check=True, capture_output=True)
+        subprocess.run(['openssl', 'pkey', '-in', str(key), '-pubout', '-out', str(target)], check=True, capture_output=True)
+        return target
+    create_key('first', public)
+    second = create_key('second', base/'second.pub')
+    third = create_key('third', base/'third.pub')
     data = legacy/'private'
     extra = legacy/'compose.devices.json'
     subprocess.run([sys.executable, str(root/'deploy/remote/initialize.py'), '--domain', 'control.example.com',
                     '--public-ip', '93.184.216.34', '--owner-key', str(public), '--output', str(data), '--compose', str(extra)], check=True)
     subprocess.run([sys.executable, str(root/'deploy/remote/register_device.py'), '--id', 'existing-second', '--name', 'Synthetic second phone',
-                    '--public-key', str(public), '--private', str(data), '--primary-key', str(public), '--compose', str(extra)], check=True)
+                    '--public-key', str(second), '--private', str(data), '--primary-key', str(public), '--compose', str(extra)], check=True)
     registry = json.loads((data/'devices.json').read_text())
     registry['default_device'] = 'existing-first'
     registry['devices'][0].update(id='existing-first', key='/run/owner-enrollment.pub')
@@ -96,7 +101,7 @@ with tempfile.TemporaryDirectory(prefix='remote-console-legacy-docker-') as temp
         manager.rollback()
         authenticated()
         assert manage.identity_snapshot(data) == original
-        manager.add_device('new-third', 'Synthetic new phone', public)
+        manager.add_device('new-third', 'Synthetic new phone', third)
         assert manager.healthy()
         authenticated()
         assert json.loads((data/'devices.json').read_text())['default_device'] == 'existing-first'
