@@ -1,8 +1,22 @@
 #!/usr/bin/env bash
 # Generic bootstrap: no personal deployment, credentials or bundled phone identities.
 set -Eeuo pipefail
+rc_release=v0.4.0
 [[ $(id -u) = 0 ]] || { printf '請用 root 或 sudo bash 執行。\n' >&2; exit 1; }
 [[ $(uname -s) = Linux ]] || { printf '此安裝器需要 Linux。\n' >&2; exit 1; }
+if [[ "${1:-}" = upgrade ]]; then
+  shift
+  for rc_tool in curl python3 openssl docker; do command -v "$rc_tool" >/dev/null || { printf '缺少工具：%s\n' "$rc_tool" >&2; exit 1; }; done
+  rc_tmp=$(mktemp -d /tmp/remote-console-bootstrap.XXXXXXXX)
+  trap 'rm -rf -- "$rc_tmp"' EXIT
+  curl -fL --retry 4 --retry-all-errors --connect-timeout 15 --max-time 120 --progress-bar "https://raw.githubusercontent.com/sing0626/remote-console/$rc_release/scripts/manage.py" -o "$rc_tmp/manage.py"
+  if [[ -f /opt/remote-console-source/.remote-console-managed ]]; then
+    python3 "$rc_tmp/manage.py" update "$@"
+  else
+    python3 "$rc_tmp/manage.py" migrate "$@"
+  fi
+  exit
+fi
 if [[ -f /opt/remote-console-source/.remote-console-managed ]]; then
   exec python3 /opt/remote-console-source/scripts/manage.py "$@"
 fi
@@ -14,7 +28,7 @@ if [[ "${1:-}" = migrate ]]; then
   for rc_tool in curl python3 openssl docker; do command -v "$rc_tool" >/dev/null || { printf '缺少工具：%s\n' "$rc_tool" >&2; exit 1; }; done
   rc_tmp=$(mktemp -d /tmp/remote-console-bootstrap.XXXXXXXX)
   trap 'rm -rf -- "$rc_tmp"' EXIT
-  curl -fL --retry 3 https://raw.githubusercontent.com/sing0626/remote-console/main/scripts/manage.py -o "$rc_tmp/manage.py"
+  curl -fL --retry 4 --retry-all-errors --connect-timeout 15 --max-time 120 --progress-bar "https://raw.githubusercontent.com/sing0626/remote-console/$rc_release/scripts/manage.py" -o "$rc_tmp/manage.py"
   python3 "$rc_tmp/manage.py" "$@"
   exit
 fi
@@ -41,7 +55,7 @@ fi
 docker info >/dev/null
 rc_tmp=$(mktemp -d /tmp/remote-console-bootstrap.XXXXXXXX)
 trap 'rm -rf -- "$rc_tmp"' EXIT
-curl -fL --retry 3 https://raw.githubusercontent.com/sing0626/remote-console/main/scripts/manage.py -o "$rc_tmp/manage.py"
+curl -fL --retry 4 --retry-all-errors --connect-timeout 15 --max-time 120 --progress-bar "https://raw.githubusercontent.com/sing0626/remote-console/$rc_release/scripts/manage.py" -o "$rc_tmp/manage.py"
 # The manager downloads an immutable commit of the latest server release.
 if [[ $# = 0 ]]; then
   python3 "$rc_tmp/manage.py" install

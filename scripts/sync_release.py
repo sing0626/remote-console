@@ -26,6 +26,10 @@ manager_path = root/'scripts/manage.py'
 manager, count = re.subn(r"^SUITE_VERSION = '[^']+'", f"SUITE_VERSION = '{version}'", manager_path.read_text(), flags=re.M)
 if count != 1: raise SystemExit('Missing standalone manager release constant')
 outputs[manager_path] = manager.encode()
+installer_path=root/'install.sh'
+installer,count=re.subn(r'^rc_release=v\d+\.\d+\.\d+', 'rc_release=v'+version, installer_path.read_text(), flags=re.M)
+if count != 1:raise SystemExit('Missing bootstrap release pin')
+outputs[installer_path]=installer.encode()
 for path, content in outputs.items():
     if args.check:
         if not path.is_file() or path.read_bytes() != content: raise SystemExit('Stale release output: '+str(path.relative_to(root)))
