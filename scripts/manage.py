@@ -1,0 +1,444 @@
+#!/usr/bin/env python3
+"""Root-only Linux deployment manager. Code upgrades never regenerate phone/trust data."""
+import argparse
+import contextlib
+import datetime
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import urllib.request
+
+REPO = 'sing0626/remote-console'
+PROJECT = 'remote-console-generic'
+MARKER = '.remote-console-managed'
+
+
+class Paths:
+    def __init__(self, root=Path('/')):
+        self.source = root / 'opt/remote-console-source'
+        self.previous = root / 'opt/remote-console-previous'
+        self.data = root / 'var/lib/remote-console-generic'
+        self.config = root / 'etc/remote-console-generic/config.json'
+        self.backups = root / 'var/backups/remote-console-generic'
+        self.launcher = root / 'usr/local/bin/remote-console'
+
+
+def write_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
+        tmp = Path(stream.name)
+        stream.write((json.dumps(value, indent=2, ensure_ascii=False)+'\n').encode())
+    tmp.chmod(0o600)
+    os.replace(tmp, path)
+
+
+def mark(path, **metadata):
+    write_json(path / MARKER, dict(managed_by=PROJECT, schema=1, **metadata))
+
+
+def owned(path):
+    if path.is_symlink():
+        return False
+    try:
+        item = json.loads((path / MARKER).read_text())
+        return item['managed_by'] == PROJECT and item['schema'] == 1
+    except (OSError, ValueError, KeyError):
+        return False
+
+
+def remove_owned(path):
+    if not owned(path):
+        raise ValueError('拒絕移除未標記為本工具管理嘅目錄：'+str(path))
+    shutil.rmtree(path)
+
+
+def fetch_json(url):
+    req = urllib.request.Request(url, headers={'User-Agent': 'RemoteConsole-manager', 'Accept': 'application/vnd.github+json'})
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.load(response)
+
+
+def extract_source(archive, destination):
+    """GitHub sources only: reject link/path traversal, devices and oversized payloads."""
+    with tarfile.open(archive, 'r:gz') as tar:
+        members = tar.getmembers()
+        total = 0
+        roots = set()
+        for member in members:
+            parts = Path(member.name).parts
+            if not parts or member.name.startswith('/') or '..' in parts or '\\' in member.name:
+                raise ValueError('不安全嘅來源路徑')
+            if not (member.isdir() or member.isfile()):
+                raise ValueError('來源壓縮檔含有連結或特殊檔案')
+            roots.add(parts[0]); total += member.size
+        if len(roots) != 1 or total > 300*1024*1024 or len(members) > 15000:
+            raise ValueError('來源壓縮檔格式或大小不符')
+        for member in members:
+            parts = Path(member.name).parts[1:]
+            if not parts:
+                continue
+            target = destination.joinpath(*parts)
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with tar.extractfile(member) as src, target.open('wb') as dst:
+                    shutil.copyfileobj(src, dst)
+                target.chmod(0o755 if member.mode & 0o111 else 0o644)
+    for required in ['scripts/manage.py', 'deploy/remote/initialize.py', 'deploy/remote/gateway.Dockerfile']:
+        if not (destination/required).is_file():
+            raise ValueError('來源版本缺少安裝檔案：'+required)
+
+
+def download_source(destination, release=None):
+    if release is None:
+        release = fetch_json(f'https://api.github.com/repos/{REPO}/releases/latest')['tag_name']
+    if not re.fullmatch(r'v\d+\.\d+\.\d+', release):
+        raise ValueError('請選擇伺服器穩定版本，例如 v0.2.0')
+    commit = fetch_json(f'https://api.github.com/repos/{REPO}/commits/{release}')['sha']
+    if not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise ValueError('無效來源版本')
+    with tempfile.TemporaryDirectory(prefix='remote-console-download-') as tmp:
+        archive = Path(tmp)/'source.tar.gz'
+        req = urllib.request.Request(f'https://codeload.github.com/{REPO}/tar.gz/{commit}', headers={'User-Agent': 'RemoteConsole-manager'})
+        with urllib.request.urlopen(req, timeout=90) as src, archive.open('wb') as dst:
+            size = 0
+            while chunk := src.read(1024*1024):
+                size += len(chunk)
+                if size > 100*1024*1024:
+                    raise ValueError('下載檔案超出大小限制')
+                dst.write(chunk)
+        extract_source(archive, destination)
+    mark(destination, release=release, commit=commit)
+    return {'release': release, 'commit': commit}
+
+
+def compose_document(source, data):
+    build = str(source/'deploy/remote')
+    def service(dockerfile, volumes, **more):
+        return dict(build={'context': build, 'dockerfile': dockerfile}, restart='unless-stopped', network_mode='host', volumes=volumes, **more)
+    services = {
+        'gateway': service('gateway.Dockerfile', [f'{data}:/private:ro', f'{data}/controller-trust:/state'],
+                           command=['-trust-store', '/state/controllers.json'], read_only=True,
+                           cap_drop=['ALL'], security_opt=['no-new-privileges:true']),
+        'signaling-tunnel': service('frps.Dockerfile', [f'{data}/frps.toml:/etc/frp/frps.toml:ro', f'{data}/pki:/pki:ro']),
+        'turn': dict(image='coturn/coturn:4.18.0-r0', user='0:0', restart='unless-stopped', network_mode='host',
+                     command=['-c', '/etc/coturn/turnserver.conf'], volumes=[f'{data}/turnserver.conf:/etc/coturn/turnserver.conf:ro'])
+    }
+    extra = data/'compose.devices.generated.json'
+    if extra.exists():
+        registry = json.loads((data/'devices.json').read_text())
+        # Reconstruct only registered secondary tunnels; do not execute arbitrary services from data.
+        for phone in registry['devices']:
+            ident = phone['id']
+            if ident == 'primary':
+                continue
+            if not re.fullmatch(r'[a-z][a-z0-9_-]{0,31}', ident):
+                raise ValueError('無效裝置 ID')
+            services['signaling-'+ident] = service('frps.Dockerfile', [f'{data}/devices/{ident}/frps.toml:/etc/frp/frps.toml:ro', f'{data}/pki:/pki:ro'])
+    return {'name': PROJECT, 'services': services}
+
+
+class Manager:
+    def __init__(self, paths=None, downloader=download_source):
+        self.p = paths or Paths()
+        self.downloader = downloader
+
+    def config(self):
+        cfg = json.loads(self.p.config.read_text())
+        if cfg.get('managed_by') != PROJECT or cfg.get('schema') != 1 or not owned(self.p.source) or not owned(self.p.data):
+            raise ValueError('未知安裝或資料目錄；現有內容會保留')
+        return cfg
+
+    def compose(self, *args, source=None):
+        source = source or self.p.source
+        runtime = self.p.data/'compose.runtime.generated.json'
+        write_json(runtime, compose_document(source, self.p.data))
+        return subprocess.run(['docker', 'compose', '--project-name', PROJECT, '-f', str(runtime), *args], check=True)
+
+    def healthy(self):
+        for attempt in range(30):
+            try:
+                with urllib.request.urlopen('http://127.0.0.1:18079/_remoteconsole/status', timeout=2) as response:
+                    value = json.load(response)
+                    if response.status == 200 and 'phone_online' in value:
+                        return True
+            except (OSError, ValueError):
+                pass
+            time.sleep(2)
+        return False
+
+    def stage(self, release):
+        self.p.source.parent.mkdir(parents=True, exist_ok=True)
+        stage = Path(tempfile.mkdtemp(prefix='.remote-console-stage-', dir=self.p.source.parent))
+        # Marker permits bounded cleanup even if download fails part way through.
+        mark(stage)
+        try:
+            version = self.downloader(stage, release)
+            return stage, version
+        except BaseException:
+            remove_owned(stage)
+            raise
+
+    def backup(self):
+        cfg = self.config()
+        self.p.backups.mkdir(parents=True, mode=0o700, exist_ok=True)
+        name = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+        target = self.p.backups/f'{name}.tar.gz'
+        with tarfile.open(target, 'w:gz') as tar:
+            tar.add(self.p.data, arcname='data', recursive=True)
+            tar.add(self.p.config, arcname='config.json')
+        target.chmod(0o600)
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        target.with_suffix('.sha256').write_text(digest+'  '+target.name+'\n')
+        print('備份（含憑證，請妥善保存）：'+str(target))
+        return target
+
+    def install(self, domain, ip, key, release=None):
+        for path in [self.p.source, self.p.previous, self.p.config, self.p.data, self.p.launcher]:
+            if path.exists() or path.is_symlink():
+                raise ValueError('現有安裝或檔案已保留：'+str(path)+'；已安裝請用 remote-console update')
+        # Do not claim or stop any existing container, including another deployment.
+        result = subprocess.run(['docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project='+PROJECT], check=True, capture_output=True, text=True)
+        if result.stdout.strip():
+            raise ValueError('已有同名 Docker 專案，現有服務已保留')
+        for kind, ports in [(socket.SOCK_STREAM, [7000, 3478, 18079, 18081]), (socket.SOCK_DGRAM, [3478])]:
+            for port in ports:
+                with socket.socket(socket.AF_INET, kind) as sock:
+                    sock.bind(('0.0.0.0', port))
+        if not ipaddress.ip_address(ip).is_global or ':' in ip:
+            raise ValueError('請輸入公網 IPv4')
+        if not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?', domain) or '.' not in domain:
+            raise ValueError('請輸入域名，不含 https:// 或路徑')
+        stage, version = self.stage(release)
+        try:
+            self.p.data.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run([sys.executable, str(stage/'deploy/remote/initialize.py'), '--domain', domain, '--public-ip', ip,
+                            '--owner-key', str(key.resolve()), '--output', str(self.p.data), '--compose', str(stage/'initial.generated.json')], check=True)
+            shutil.move(str(stage/'initial.generated.json'), self.p.data/'compose.devices.generated.json')
+            mark(self.p.data)
+            stage.rename(self.p.source)
+        except BaseException:
+            # Failed initialization remains private for inspection; never erase unknown files.
+            if stage.exists():
+                remove_owned(stage)
+            raise
+        cfg = dict(managed_by=PROJECT, schema=1, domain=domain, public_ip=ip, **version)
+        write_json(self.p.config, cfg)
+        self.p.launcher.parent.mkdir(parents=True, exist_ok=True)
+        self.p.launcher.write_text('#!/bin/sh\n# managed by remote-console-generic\nexec python3 /opt/remote-console-source/scripts/manage.py "$@"\n')
+        self.p.launcher.chmod(0o755)
+        try:
+            self.compose('config', '--quiet')
+            self.compose('up', '-d', '--build')
+            if not self.healthy():
+                raise RuntimeError('本機服務未通過健康檢查')
+        except BaseException:
+            print('安裝設定已保存；用 remote-console logs 檢查，再用 remote-console restart 重試。', file=sys.stderr)
+            raise
+        self.instructions(cfg)
+
+    def instructions(self, cfg):
+        print('\n入口：https://'+cfg['domain']+'/control')
+        print('用現有 HTTPS 反代 → http://127.0.0.1:18079；保留 Host / Origin 及 WebSocket。無需 Caddy。')
+        print('放行 TCP 7000、TCP/UDP 3478、UDP 49160–49260；後端 18079/18081 不對外開放。')
+        print('電話設定網址：https://'+cfg['domain'])
+        print('將此 HTTPS 網址寫入受控電話 Root 工作目錄 enrollment-url，然後重啟電話受控服務。')
+        print('首次控制端請喺電話批准一次，之後免 PIN；電話可撤銷。')
+        print('管理選單：remote-console')
+
+    def update(self, release=None):
+        cfg = self.config()
+        stage, version = self.stage(release)
+        if cfg['commit'] == version['commit']:
+            remove_owned(stage); print('已經係 '+version['release']); return
+        try:
+            self.backup()
+            self.compose('config', '--quiet', source=stage)
+            # Build before switching: existing running containers remain available.
+            self.compose('build', '--pull', source=stage)
+        except BaseException:
+            remove_owned(stage)
+            raise
+        if self.p.previous.exists():
+            remove_owned(self.p.previous)
+        self.p.source.rename(self.p.previous)
+        stage.rename(self.p.source)
+        try:
+            self.compose('up', '-d', '--remove-orphans')
+            if not self.healthy():
+                raise RuntimeError('新版服務未通過健康檢查')
+        except BaseException:
+            failed = self.p.source
+            recovery = Path(str(stage)+'-failed')
+            failed.rename(recovery)
+            self.p.previous.rename(self.p.source)
+            try:
+                self.compose('up', '-d', '--build', '--remove-orphans')
+                if not self.healthy():
+                    raise RuntimeError('舊版服務亦未通過健康檢查，請檢查 logs')
+            finally:
+                remove_owned(recovery)
+            raise RuntimeError('新版啟動失敗，已恢復舊版程式；電話與控制端憑證保持原有資料')
+        write_json(self.p.config, dict(cfg, **version, previous_release=cfg['release'], previous_commit=cfg['commit']))
+        print('已更新至 '+version['release']+'；電話配對與控制端授權已保留。')
+
+    def rollback(self):
+        cfg = self.config()
+        if not owned(self.p.previous):
+            raise ValueError('冇可還原嘅上一版')
+        self.backup()
+        stage = Path(str(self.p.source)+'-rollback')
+        if stage.exists():
+            raise ValueError('還原暫存目錄已存在，請先檢查')
+        self.p.source.rename(stage); self.p.previous.rename(self.p.source); stage.rename(self.p.previous)
+        try:
+            self.compose('up', '-d', '--build', '--remove-orphans')
+            if not self.healthy():
+                raise RuntimeError('上一版服務未通過健康檢查')
+        except BaseException:
+            self.p.source.rename(stage); self.p.previous.rename(self.p.source); stage.rename(self.p.previous)
+            self.compose('up', '-d', '--build', '--remove-orphans')
+            raise
+        version = json.loads((self.p.source/MARKER).read_text())
+        write_json(self.p.config, dict(cfg, release=version['release'], commit=version['commit']))
+        print('已還原至 '+version['release']+'；保留目前授權資料。')
+
+    def add_device(self, ident, name, key):
+        self.config(); self.backup()
+        subprocess.run([sys.executable, str(self.p.source/'deploy/remote/register_device.py'), '--private', str(self.p.data),
+                        '--primary-key', str(self.p.data/'enrollment.pub'), '--id', ident, '--name', name, '--public-key', str(key.resolve()),
+                        '--compose', str(self.p.data/'compose.devices.generated.json')], check=True)
+        self.compose('up', '-d', '--build', '--remove-orphans')
+
+    def uninstall(self, purge=False):
+        self.config()
+        # Validate every deletion target before stopping containers or changing any files.
+        for path in [self.p.source, self.p.data, self.p.previous]:
+            if path.exists() and not owned(path):
+                raise ValueError('未知目錄已保留：'+str(path))
+        if self.p.launcher.is_symlink() or (self.p.launcher.exists() and 'managed by '+PROJECT not in self.p.launcher.read_text()):
+            raise ValueError('未知管理指令已保留')
+        self.backup()
+        self.compose('down', '--remove-orphans')
+        if not purge:
+            print('服務已解除安裝；資料、程式及管理指令已保留，可用 remote-console start 重新啟用。')
+            return
+        remove_owned(self.p.source)
+        if self.p.previous.exists():
+            remove_owned(self.p.previous)
+        remove_owned(self.p.data)
+        self.p.config.unlink()
+        self.p.launcher.unlink(missing_ok=True)
+        print('已移除本工具嘅程式及資料。獨立備份保留於 '+str(self.p.backups)+'；Docker 及其他服務不受影響。')
+
+
+def ask(prompt, default=None):
+    value = input(prompt+(' ['+default+']' if default else '')+'：').strip()
+    return value or default or ''
+
+
+def key_input():
+    answer = ask('電話 RSA 公鑰檔案路徑（或貼上 PEM 第一行，再貼餘下內容）')
+    if answer == '-----BEGIN PUBLIC KEY-----':
+        lines = [answer]
+        while lines[-1] != '-----END PUBLIC KEY-----':
+            lines.append(input().strip())
+            if len(lines) > 40:
+                raise ValueError('公鑰格式過長')
+        handle = tempfile.NamedTemporaryFile(prefix='remote-console-public-', delete=False)
+        handle.write(('\n'.join(lines)+'\n').encode()); handle.close()
+        return Path(handle.name), True
+    return Path(answer).expanduser(), False
+
+
+def wizard(manager, args):
+    print('RemoteConsole · 新獨立部署（需要自己嘅域名、HTTPS 反代及電話公鑰）')
+    domain = args.domain or ask('HTTPS 域名，例如 control.example.com').lower()
+    ip = args.public_ip or ask('此主機公網 IPv4')
+    key, temporary = (args.owner_key, False) if args.owner_key else key_input()
+    try:
+        manager.install(domain, ip, key, args.release)
+    finally:
+        if temporary:
+            key.unlink(missing_ok=True)
+
+
+@contextlib.contextmanager
+def lock(path):
+    import fcntl
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    with path.open('a') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
+def main():
+    parser = argparse.ArgumentParser(description='RemoteConsole 管理選單')
+    parser.add_argument('command', nargs='?', choices=['install', 'update', 'status', 'start', 'stop', 'restart', 'logs', 'add-device', 'backup', 'rollback', 'uninstall', 'info'])
+    parser.add_argument('--release', help='指定伺服器穩定版本；預設最新版本')
+    parser.add_argument('--domain'); parser.add_argument('--public-ip'); parser.add_argument('--owner-key', type=Path)
+    parser.add_argument('--id'); parser.add_argument('--name'); parser.add_argument('--public-key', type=Path)
+    parser.add_argument('--purge', action='store_true', help='明確刪除本工具程式及資料（仍保留備份）')
+    args = parser.parse_args()
+    if os.name != 'posix' or os.geteuid() != 0:
+        raise SystemExit('請喺 Linux 以 root 或 sudo 執行。')
+    os.umask(0o077)
+    manager = Manager()
+    # curl | bash also works: prompts must read the terminal rather than script input.
+    if not sys.stdin.isatty() and (not args.command or args.command == 'install' and not all([args.domain, args.public_ip, args.owner_key])):
+        sys.stdin = open('/dev/tty')
+    def execute(command):
+        if command == 'install': wizard(manager, args)
+        elif command == 'update': manager.update(args.release)
+        elif command == 'backup': manager.backup()
+        elif command == 'rollback': manager.rollback()
+        elif command == 'uninstall':
+            if not args.purge or ask('輸入 DELETE 確認刪除程式及資料（備份保留）') == 'DELETE':
+                manager.uninstall(args.purge)
+        elif command == 'add-device':
+            ident = args.id or ask('新電話 ID（英文字母開頭）')
+            name = args.name or ask('電話顯示名稱')
+            key, temporary = (args.public_key, False) if args.public_key else key_input()
+            try: manager.add_device(ident, name, key)
+            finally:
+                if temporary: key.unlink(missing_ok=True)
+        else:
+            cfg = manager.config()
+            if command == 'info': manager.instructions(cfg)
+            elif command == 'status':
+                print('版本：'+cfg['release']); manager.compose('ps'); manager.instructions(cfg)
+            elif command == 'logs': manager.compose('logs', '--tail', '150', '-f')
+            elif command == 'stop': manager.compose('stop')
+            elif command in ['start', 'restart']: manager.compose('up', '-d', '--build', '--remove-orphans')
+    try:
+        with lock(manager.p.config.parent/'manager.lock'):
+            if args.command:
+                execute(args.command); return
+            choices = ['install', 'status', 'start', 'stop', 'restart', 'logs', 'update', 'add-device', 'backup', 'rollback', 'uninstall', 'info']
+            labels = ['安裝', '狀態', '啟動', '停止', '重新啟動', '即時日誌（Ctrl+C 返回）', '更新（保留配對及授權）', '新增電話', '備份', '還原上一版程式', '解除安裝（保留資料）', '連線／反代設定']
+            while True:
+                print('\nRemoteConsole · 遙控台管理\n'+'\n'.join(f'{n}. {label}' for n, label in enumerate(labels, 1))+'\n0. 離開')
+                value = ask('選擇')
+                if value == '0': break
+                if not value.isdigit() or not 1 <= int(value) <= len(choices): continue
+                try: execute(choices[int(value)-1])
+                except KeyboardInterrupt: print('\n已返回選單。')
+                except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error: print('未完成：'+str(error), file=sys.stderr)
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+        raise SystemExit('未完成：'+str(error))
+
+
+if __name__ == '__main__':
+    main()

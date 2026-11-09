@@ -50,14 +50,31 @@ docker compose up -d --build
 
 首次在控制端要求授權，於受控電話「控制端授權」核對名稱及代碼後批准。之後同一入口內的電話共用該控制端授權，並可撤銷其連線。代碼用作核對，不需輸入電話 PIN。
 
-亦可在全新伺服器執行通用安裝器（需要先安裝上述工具，並準備自己的電話公鑰）：
+### 一行安裝與管理選單
+
+全新 Ubuntu / Debian 主機以 root 執行以下一行。安裝器自動補齊 Python、OpenSSL、Docker Compose，然後詢問自己的域名、公網 IPv4 及電話公鑰（檔案路徑或直接貼 PEM）：
 
 ```bash
-curl -fL https://raw.githubusercontent.com/sing0626/remote-console/main/install.sh -o /tmp/remote-console-install.sh
-sudo bash /tmp/remote-console-install.sh --domain control.example.com --public-ip YOUR_PUBLIC_IPV4 --owner-key /path/to/your-phone.pub
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/main/install.sh)
 ```
 
-安裝器只接受新部署；已存在的目錄和憑證會保留並停止，不會覆蓋既有服務。
+之後輸入 `remote-console` 開啟繁體中文選單。亦支援直接指令：
+
+| 指令 | 功能 |
+| --- | --- |
+| `remote-console status` | 版本、容器狀態、網址及反代設定 |
+| `remote-console start / stop / restart` | 啟動、停止或重新建立服務 |
+| `remote-console logs` | 即時日誌；Ctrl+C 返回 |
+| `remote-console update` | 更新至最新伺服器版本，先備份；失敗恢復舊程式 |
+| `remote-console add-device` | 加入另一部電話，仍然使用同一網址 |
+| `remote-console backup` | 備份自己的設定、電話身份及控制端授權 |
+| `remote-console rollback` | 還原上一版程式，保留目前授權 |
+| `remote-console uninstall` | 移除本專案容器，保留資料與管理指令，可重新啟用 |
+| `remote-console uninstall --purge` | 額外輸入 DELETE 才刪除本工具程式及資料；備份保留 |
+
+程式位於 `/opt/remote-console-source`，資料位於 `/var/lib/remote-console-generic`，備份位於 `/var/backups/remote-console-generic`。更新下載固定 commit 的原始碼，先建置新版再切換；不重新產生現有配對密鑰、TURN 設定或控制端憑證。備份包含自己的憑證，權限 0600，請自行保存，勿上傳公開倉庫。解除安裝只處理本工具的 Docker 專案，不移除 Docker、不做全域 prune。
+
+通用安裝器只管理自己標記的部署；遇到其他既有安裝、未知目錄或相同 port 會停止並保留現有內容。需要 HTTPS 反代與防火牆設定，安裝後會列出要求；不會安裝 Caddy 或佔用 80/443。手動部署仍可沿用上面的 `initialize.py`／Compose 流程，但不會自動納入管理選單。
 
 ## 檢查公開內容
 

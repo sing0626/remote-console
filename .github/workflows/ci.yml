@@ -11,8 +11,17 @@ jobs:
         with:
           go-version-file: deploy/remote/gateway/go.mod
       - run: python3 scripts/check_public_tree.py
+      - run: python3 -m unittest discover -s scripts -p 'test_manage.py'
+      - run: bash -n install.sh deploy/remote/setup.sh
       - run: python3 -m unittest test_initialize.py
         working-directory: deploy/remote
       - run: go test -race ./...
         working-directory: deploy/remote/gateway
       - run: python3 scripts/build_native.py
+  docker-lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate real managed Docker install and data-preserving lifecycle
+        run: python3 scripts/integration_manage.py
