@@ -390,7 +390,16 @@ class Manager:
                 # Rebuild the preserved original program, using original Compose/project/data.
                 # Never rewind the controller store: a concurrent revocation must stay revoked.
                 try:
-                    old_compose('up', '-d', '--build', '--remove-orphans')
+                    old_compose('up', '-d', '--build', '--force-recreate', '--remove-orphans')
+                    restored = False
+                    for attempt in range(30):
+                        try:
+                            with urllib.request.urlopen('http://127.0.0.1:18079/_remoteconsole/status', timeout=2) as response:
+                                if json.load(response).get('gateway_ready') is True:
+                                    restored = True; break
+                        except (OSError, ValueError): pass
+                        time.sleep(1)
+                    if not restored: raise RuntimeError('原有 gateway 未通過恢復檢查')
                 except BaseException as recovery_error:
                     raise RuntimeError('升級未完成，舊版恢復亦失敗；資料與備份已保留。請檢查 Docker 日誌。') from recovery_error
             for path in added:
