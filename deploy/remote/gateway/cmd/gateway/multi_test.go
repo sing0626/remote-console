@@ -86,7 +86,7 @@ func TestDirectoryAndSingleURLPortal(t *testing.T) {
 	}
 	body, _ := io.ReadAll(r.Body)
 	r.Body.Close()
-	if !strings.Contains(string(body), "你的電話，都喺呢度") || strings.Contains(string(body), "sealed") {
+	if !strings.Contains(string(body), "裝置空間") || strings.Contains(string(body), "sealed") {
 		t.Fatal("entry must be a chooser, without enrollment credentials")
 	}
 }

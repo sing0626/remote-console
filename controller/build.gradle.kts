@@ -1,4 +1,5 @@
 plugins { id("com.android.application") }
+val distributionKeystore = System.getenv("WEBSREEN_KEYSTORE")?.takeIf { it.isNotBlank() }?.let { file(it) }?.takeIf { it.isFile }
 android {
     namespace = "lab.remote.controller"
     compileSdk = 34
@@ -15,6 +16,20 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { buildConfig = true }
+    signingConfigs {
+        if (distributionKeystore != null) {
+            create("distribution") {
+                storeFile = distributionKeystore
+                storePassword = System.getenv("WEBSREEN_KEYSTORE_PASSWORD") ?: "webscreen"
+                keyAlias = System.getenv("WEBSREEN_KEY_ALIAS") ?: "webscreen"
+                keyPassword = System.getenv("WEBSREEN_KEY_PASSWORD") ?: "webscreen"
+                storeType = "PKCS12"
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") { signingConfig = signingConfigs.findByName("distribution") ?: signingConfigs.getByName("debug") }
+    }
 }
 dependencies {
     implementation("io.github.webrtc-sdk:android:150.7871.04")
