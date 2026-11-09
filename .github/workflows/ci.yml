@@ -1,0 +1,18 @@
+name: Check generic source
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  privacy-and-gateway:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: deploy/remote/gateway/go.mod
+      - run: python3 scripts/check_public_tree.py
+      - run: python3 -m unittest test_initialize.py
+        working-directory: deploy/remote
+      - run: go test -race ./...
+        working-directory: deploy/remote/gateway
+      - run: python3 scripts/build_native.py

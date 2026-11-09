@@ -1,0 +1,34 @@
+name: remote-console-generic
+include:
+  - compose.devices.generated.json
+services:
+  gateway:
+    command: ["-trust-store", "/state/controllers.json"]
+    build:
+      context: .
+      dockerfile: gateway.Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ./private:/private:ro
+      - ./private/controller-trust:/state
+  signaling-tunnel:
+    build:
+      context: .
+      dockerfile: frps.Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./private/frps.toml:/etc/frp/frps.toml:ro
+      - ./private/pki:/pki:ro
+  turn:
+    image: coturn/coturn:4.18.0-r0
+    user: "0:0"
+    restart: unless-stopped
+    network_mode: host
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./private/turnserver.conf:/etc/coturn/turnserver.conf:ro

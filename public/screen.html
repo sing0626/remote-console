@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-HK"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101a20"><title>遙控台</title>
+<link rel="manifest" href="/static/manifest.json"><link rel="stylesheet" href="/static/marble-mobile.css?v=017">
+<script src="/static/zh-HK.js"></script><script src="/static/i18n.js"></script>
+<script src="/static/ui.js" defer></script><script src="/static/connect.js?v=017" defer></script>
+<script src="/static/fullscreen.js?v=017" defer></script><script src="/static/screen.js" defer></script>
+<script src="/static/capabilities/backlight.js" defer></script><script src="/static/capabilities/uhid_volume.js" defer></script>
+<script src="/static/capabilities/buttons.js?v=017" defer></script><script src="/static/marble-mobile.js?v=017" defer></script>
+</head><body data-connection="idle">
+<div class="main-container">
+<header class="session-header">
+ <a class="device-brand" href="/control" title="返回控制入口"><span class="device-mark" aria-hidden="true">↗</span><span><strong id="remote-device-name">Android 裝置</strong><small>遙控台</small></span></a>
+ <div id="marble-status" class="connection-pill" role="status" aria-live="polite"><i aria-hidden="true"></i><span id="connection-label">準備連接</span></div>
+ <div class="header-actions"><button id="marble-audio" class="control-btn " aria-label="開聲" title="開聲" aria-pressed="false" disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                </svg><span>開聲</span></button><button id="marble-fullscreen" class="control-btn " aria-label="全螢幕" title="全螢幕" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span>全螢幕</span></button></div>
+</header>
+<main class="video-container" aria-label="電話畫面">
+ <video id="remoteVideo" autoplay muted playsinline disablepictureinpicture></video>
+ <section id="connection-overlay" class="connection-overlay" aria-label="連線提示">
+  <div class="connection-card"><span class="connection-orbit" aria-hidden="true"></span><h1 id="connection-title">正在連接電話</h1><p id="connection-detail">畫面準備好就會顯示。</p><button id="marble-retry" class="action-button" hidden>重新連接</button><a id="pair-again" href="/unlock" hidden>重新配對</a></div>
+ </section>
+ <button id="marble-play" class="action-button play-button" hidden>點一下顯示畫面</button>
+</main>
+<nav class="controls-container" aria-label="電話操作"><button id="backButton" class="control-btn " aria-label="返回" title="返回" data-remote disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                </svg><span>返回</span></button><button id="homeButton" class="control-btn " aria-label="主畫面" title="主畫面" data-remote disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+                </svg><span>主畫面</span></button><button id="menuButton" class="control-btn " aria-label="最近使用" title="最近使用" data-remote disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
+                </svg><span>最近使用</span></button><button id="marble-text" class="control-btn " aria-label="鍵盤" title="鍵盤" data-remote disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M5 9h2m2 0h2m2 0h2m2 0h2M5 12h2m2 0h2m2 0h2m2 0h2M7 16h10"/></svg><span>鍵盤</span></button><button id="marble-more" class="control-btn " aria-label="更多" title="更多" aria-haspopup="dialog" aria-controls="marble-tools-dialog"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg><span>更多</span></button></nav>
+</div>
+<button id="marble-restore-controls" class="restore-controls" aria-label="顯示操作列" title="顯示操作列"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+<dialog id="marble-tools-dialog" class="sheet" aria-labelledby="tools-title">
+ <div class="sheet-heading"><div><small>Android 裝置</small><h2 id="tools-title">更多操作</h2></div><button class="close-button" data-close="marble-tools-dialog" aria-label="關閉更多操作">×</button></div>
+ <p class="input-hint">最多 4 部裝置共用控制；操作會即時影響同一個畫面。</p><p class="section-label">電話與畫面</p><div class="tools-grid"><button id="volumeDownButton" class="control-btn feature-android-buttons" aria-label="音量減" title="音量減" data-remote disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
+                </svg><span>音量減</span></button><button id="volumeUpButton" class="control-btn feature-android-buttons" aria-label="音量加" title="音量加" data-remote disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                </svg><span>音量加</span></button><button id="powerButton" class="control-btn feature-android-buttons" aria-label="電源" title="電源" data-remote disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z" />
+                </svg><span>電源</span></button><button id="rotateButton" class="control-btn feature-android-buttons" aria-label="旋轉電話" title="旋轉電話" data-remote disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="6" width="6" height="12" rx="1" />
+                    <path d="M5 10a7 7 0 0 1 7-7" />
+                    <polyline points="8 3 12 3 12 7" />
+                    <path d="M19 14a7 7 0 0 1-7 7" />
+                    <polyline points="16 21 12 21 12 17" />
+                </svg><span>旋轉電話</span></button><button id="backlightToggleBtn" class="control-btn " aria-label="電話背光" title="電話背光" data-remote disabled><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z" />
+                </svg><span>電話背光</span></button><button id="tools-fullscreen" class="control-btn " aria-label="全螢幕" title="全螢幕" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span>全螢幕</span></button></div>
+ <section class="stream-details" aria-labelledby="stream-title"><h3 id="stream-title">連線資訊</h3><div id="stream-info" class="stream-info">連線後顯示串流資訊</div><p class="stream-note">FPS 會隨畫面變化；靜止畫面可能低於所選上限。</p></section>
+ <details class="advanced-tools"><summary>進階輸入</summary><div class="tools-grid"><button id="uhidToggleBtn" class="control-btn feature-uhid" aria-label="虛擬滑鼠" title="虛擬滑鼠" data-remote disabled style="display:none"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M13 1.07V9h7c0-4.08-3.05-7.44-7-7.93zM4 15c0 4.42 3.58 8 8 8s8-3.58 8-8v-4H4v4zm7-13.93C7.05 1.56 4 4.92 4 9h7V1.07z" />
+                </svg><span>虛擬滑鼠</span></button><button id="uhidKeyboardToggleBtn" class="control-btn feature-uhid" aria-label="實體鍵盤" title="實體鍵盤" data-remote disabled style="display:none"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z" />
+                </svg><span>實體鍵盤</span></button><button id="uhidGamepadToggleBtn" class="control-btn feature-uhid" aria-label="遊戲控制器" title="遊戲控制器" data-remote disabled style="display:none"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path
+                        d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                </svg><span>遊戲控制器</span></button></div></details>
+ <div class="session-actions"><button id="tools-reconnect" class="secondary-button">重新連接</button><a href="/control">離開控制</a></div>
+</dialog>
+<dialog id="marble-text-dialog" class="sheet text-sheet" aria-labelledby="text-title">
+ <form id="marble-text-form"><div class="sheet-heading"><div><small>文字輸入</small><h2 id="text-title">傳送到電話</h2></div><button type="button" class="close-button" data-close="marble-text-dialog" aria-label="關閉鍵盤">×</button></div>
+ <p class="input-hint">先喺電話畫面點選輸入欄，再喺呢度打字。</p>
+ <label class="sr-only" for="marble-input">要傳送嘅文字</label><textarea id="marble-input" rows="4" placeholder="輸入中文或其他文字…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+ <p id="marble-input-status" role="status" class="input-status"></p>
+ <div class="form-actions"><button type="button" class="secondary-button" data-close="marble-text-dialog">取消</button><button type="submit" class="action-button">傳送文字</button></div></form>
+</dialog>
+<script>window.MANNUAL_ROTATE=true;function triggerCheck(){requestAnimationFrame(()=>{if(typeof updateVideoCache==='function')updateVideoCache();});}window.addEventListener('resize',triggerCheck);window.addEventListener('load',()=>start());</script>
+</body></html>

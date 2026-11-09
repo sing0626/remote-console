@@ -1,0 +1,103 @@
+diff --git a/server/src/main/java/com/genymobile/scrcpy/FakeContext.java b/server/src/main/java/com/genymobile/scrcpy/FakeContext.java
+index 5d41a8f..038cced 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/FakeContext.java
++++ b/server/src/main/java/com/genymobile/scrcpy/FakeContext.java
+@@ -16,7 +16,7 @@ import java.lang.reflect.Field;
+ 
+ public final class FakeContext extends ContextWrapper {
+ 
+-    public static final String PACKAGE_NAME = "com.android.shell";
++    public static final String PACKAGE_NAME = Process.myUid() == Process.SYSTEM_UID ? "android" : "com.android.shell";
+     public static final int ROOT_UID = 0; // Like android.os.Process.ROOT_UID, but before API 29
+ 
+     private static final FakeContext INSTANCE = new FakeContext();
+@@ -74,7 +74,7 @@ public final class FakeContext extends ContextWrapper {
+     @TargetApi(AndroidVersions.API_31_ANDROID_12)
+     @Override
+     public AttributionSource getAttributionSource() {
+-        AttributionSource.Builder builder = new AttributionSource.Builder(Process.SHELL_UID);
++        AttributionSource.Builder builder = new AttributionSource.Builder(Process.myUid());
+         builder.setPackageName(PACKAGE_NAME);
+         return builder.build();
+     }
+diff --git a/server/src/main/java/com/genymobile/scrcpy/Server.java b/server/src/main/java/com/genymobile/scrcpy/Server.java
+index d7d1a76..b460323 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/Server.java
++++ b/server/src/main/java/com/genymobile/scrcpy/Server.java
+@@ -278,13 +278,24 @@ public final class Server {
+ 
+     @SuppressWarnings("deprecation")
+     private static void dropRootPrivileges() {
++        if (Boolean.getBoolean("marble.secure_capture") && Os.getuid() != 0) {
++            throw new SecurityException("Marble secure capture must be root-launched");
++        }
+         try {
+             if (Os.getuid() == 0) {
+                 // Copy-paste does not work with root user
+                 // <https://github.com/Genymobile/scrcpy/issues/6224>
+-                Os.setuid(2000);
++                // Marble's authenticated on-device root transport can request a
++                // secure mirror. Switch this process only to the Android system
++                // identity, which can create a SECURE display and has a valid
++                // package/UID attribution for clipboard and audio services.
++                boolean secureMirror = Boolean.getBoolean("marble.secure_capture");
++                Os.setuid(secureMirror ? 1000 : 2000);
+             }
+         } catch (Exception e) {
++            if (Boolean.getBoolean("marble.secure_capture")) {
++                throw new IllegalStateException("Cannot establish secure mirror identity", e);
++            }
+             Ln.w("Cannot set UID", e);
+         }
+     }
+diff --git a/server/src/main/java/com/genymobile/scrcpy/video/ScreenCapture.java b/server/src/main/java/com/genymobile/scrcpy/video/ScreenCapture.java
+index 0768181..33c4751 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/video/ScreenCapture.java
++++ b/server/src/main/java/com/genymobile/scrcpy/video/ScreenCapture.java
+@@ -134,6 +134,9 @@ public class ScreenCapture extends SurfaceCapture {
+                     .createVirtualDisplay("scrcpy", inputSize.getWidth(), inputSize.getHeight(), displayId, surface);
+             Ln.d("Display: using DisplayManager API");
+         } catch (Exception displayManagerException) {
++            if (Boolean.getBoolean("marble.secure_capture")) {
++                throw new AssertionError("Marble secure mirror unavailable", displayManagerException);
++            }
+             if (Build.BRAND.equalsIgnoreCase("oculus") && Build.MODEL.toLowerCase(Locale.ROOT).startsWith("quest")) {
+                 // Workaround for buggy createVirtualDisplay on Quest
+                 try {
+diff --git a/server/src/main/java/com/genymobile/scrcpy/video/SurfaceEncoder.java b/server/src/main/java/com/genymobile/scrcpy/video/SurfaceEncoder.java
+index 539681b..d5caaf7 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/video/SurfaceEncoder.java
++++ b/server/src/main/java/com/genymobile/scrcpy/video/SurfaceEncoder.java
+@@ -312,7 +312,7 @@ public class SurfaceEncoder implements AsyncProcessor {
+         format.setString(MediaFormat.KEY_MIME, videoMimeType);
+         format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate);
+         // must be present to configure the encoder, but does not impact the actual frame rate, which is variable
+-        format.setInteger(MediaFormat.KEY_FRAME_RATE, 60);
++        format.setInteger(MediaFormat.KEY_FRAME_RATE, maxFps > 0 ? (int) Math.ceil(maxFps) : 60);
+         format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+         if (Build.VERSION.SDK_INT >= AndroidVersions.API_24_ANDROID_7_0) {
+             format.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
+diff --git a/server/src/main/java/com/genymobile/scrcpy/wrappers/DisplayManager.java b/server/src/main/java/com/genymobile/scrcpy/wrappers/DisplayManager.java
+index 1be04c3..21dfab5 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/wrappers/DisplayManager.java
++++ b/server/src/main/java/com/genymobile/scrcpy/wrappers/DisplayManager.java
+@@ -169,6 +169,19 @@ public final class DisplayManager {
+     }
+ 
+     public VirtualDisplay createVirtualDisplay(String name, int width, int height, int displayIdToMirror, Surface surface) throws Exception {
++        if (Boolean.getBoolean("marble.secure_capture")) {
++            if (android.os.Process.myUid() != android.os.Process.SYSTEM_UID || displayIdToMirror != 0) {
++                throw new SecurityException("Marble secure mirror requires system identity and main display");
++            }
++            VirtualDisplay secureDisplay = createNewVirtualDisplay(name, width, height, 1, surface,
++                    android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
++                    | android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_SECURE);
++            if (secureDisplay == null) {
++                throw new IllegalStateException("Could not create Marble secure display");
++            }
++            Ln.i("Marble: secure main-display mirror active");
++            return secureDisplay;
++        }
+         Method method = getCreateVirtualDisplayMethod();
+         return (VirtualDisplay) method.invoke(null, name, width, height, displayIdToMirror, surface);
+     }

@@ -1,0 +1,45 @@
+// !$*UTF8*$!
+{archiveVersion=1;classes={};objectVersion=56;objects={
+000000000000000000000029 = {isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=TrustedController.swift;sourceTree="<group>";};
+00000000000000000000002A = {isa=PBXBuildFile;fileRef=000000000000000000000029;};
+00000000000000000000001E = {isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=MotionUITests.swift;sourceTree="<group>";};
+00000000000000000000001F = {isa=PBXFileReference;explicitFileType=wrapper.cfbundle;path=RemoteControllerUITests.xctest;sourceTree=BUILT_PRODUCTS_DIR;};
+000000000000000000000020 = {isa=PBXBuildFile;fileRef=00000000000000000000001E;};
+000000000000000000000021 = {isa=PBXSourcesBuildPhase;buildActionMask=2147483647;files=(000000000000000000000020,);runOnlyForDeploymentPostprocessing=0;};
+000000000000000000000022 = {isa=PBXFrameworksBuildPhase;buildActionMask=2147483647;files=();runOnlyForDeploymentPostprocessing=0;};
+000000000000000000000023 = {isa=PBXResourcesBuildPhase;buildActionMask=2147483647;files=();runOnlyForDeploymentPostprocessing=0;};
+000000000000000000000028 = {isa=PBXContainerItemProxy;containerPortal=000000000000000000000001;proxyType=1;remoteGlobalIDString=000000000000000000000004;remoteInfo=RemoteController;};
+000000000000000000000027 = {isa=PBXTargetDependency;target=000000000000000000000004;targetProxy=000000000000000000000028;};
+00000000000000000000001D = {isa=PBXNativeTarget;buildConfigurationList=000000000000000000000024;buildPhases=(000000000000000000000021,000000000000000000000022,000000000000000000000023,);buildRules=();dependencies=(000000000000000000000027,);name=RemoteControllerUITests;productName=RemoteControllerUITests;productReference=00000000000000000000001F;productType="com.apple.product-type.bundle.ui-testing";};
+00000000000000000000001B = {isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=ConsoleDesign.swift;sourceTree="<group>";};
+00000000000000000000001C = {isa=PBXBuildFile;fileRef=00000000000000000000001B;};
+000000000000000000000014 = {isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=NativeSession.swift;sourceTree="<group>";};
+000000000000000000000015 = {isa=PBXBuildFile;fileRef=000000000000000000000014;};
+000000000000000000000016 = {isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=ControlProtocol.swift;sourceTree="<group>";};
+000000000000000000000017 = {isa=PBXBuildFile;fileRef=000000000000000000000016;};
+000000000000000000000018 = {isa=XCRemoteSwiftPackageReference;repositoryURL="https://github.com/stasel/WebRTC.git";requirement={kind=exactVersion;version=157.0.0;};};
+000000000000000000000019 = {isa=XCSwiftPackageProductDependency;package=000000000000000000000018;productName=WebRTC;};
+00000000000000000000001A = {isa=PBXBuildFile;productRef=000000000000000000000019;};
+000000000000000000000012 = {isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=Endpoint.swift;sourceTree="<group>";};
+000000000000000000000013 = {isa=PBXBuildFile;fileRef=000000000000000000000012;};
+000000000000000000000005 = {isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=RemoteController.swift;sourceTree="<group>";};
+000000000000000000000006 = {isa=PBXFileReference;lastKnownFileType=text.plist.xml;path=Info.plist;sourceTree="<group>";};
+000000000000000000000007 = {isa=PBXFileReference;explicitFileType=wrapper.application;path=RemoteController.app;sourceTree=BUILT_PRODUCTS_DIR;};
+000000000000000000000008 = {isa=PBXBuildFile;fileRef=000000000000000000000005;};
+000000000000000000000002 = {isa=PBXGroup;children=(00000000000000000000001E,000000000000000000000005,00000000000000000000001B,000000000000000000000012,000000000000000000000014,000000000000000000000029,000000000000000000000016,000000000000000000000006,000000000000000000000003,);sourceTree="<group>";};
+000000000000000000000003 = {isa=PBXGroup;children=(000000000000000000000007,00000000000000000000001F,);name=Products;sourceTree="<group>";};
+000000000000000000000009 = {isa=PBXSourcesBuildPhase;buildActionMask=2147483647;files=(000000000000000000000008,000000000000000000000013,000000000000000000000015,00000000000000000000002A,000000000000000000000017,00000000000000000000001C,);runOnlyForDeploymentPostprocessing=0;};
+00000000000000000000000A = {isa=PBXFrameworksBuildPhase;buildActionMask=2147483647;files=(00000000000000000000001A,);runOnlyForDeploymentPostprocessing=0;};
+00000000000000000000000B = {isa=PBXResourcesBuildPhase;buildActionMask=2147483647;files=();runOnlyForDeploymentPostprocessing=0;};
+000000000000000000000004 = {isa=PBXNativeTarget;buildConfigurationList=00000000000000000000000D;buildPhases=(000000000000000000000009,00000000000000000000000A,00000000000000000000000B,);buildRules=();dependencies=();packageProductDependencies=(000000000000000000000019,);name=RemoteController;productName=RemoteController;productReference=000000000000000000000007;productType="com.apple.product-type.application";};
+000000000000000000000001 = {isa=PBXProject;attributes={LastUpgradeCheck=1600;};buildConfigurationList=00000000000000000000000C;compatibilityVersion="Xcode 14.0";developmentRegion=en;hasScannedForEncodings=0;knownRegions=(en,Base,"zh-HK",);mainGroup=000000000000000000000002;productRefGroup=000000000000000000000003;projectDirPath="";projectRoot="";packageReferences=(000000000000000000000018,);targets=(000000000000000000000004,00000000000000000000001D,);};
+00000000000000000000000E = {isa=XCBuildConfiguration;buildSettings={SDKROOT=iphoneos;IPHONEOS_DEPLOYMENT_TARGET=15.0;SWIFT_VERSION=5.0;SWIFT_OPTIMIZATION_LEVEL="-Onone";};name=Debug;};
+00000000000000000000000F = {isa=XCBuildConfiguration;buildSettings={SDKROOT=iphoneos;IPHONEOS_DEPLOYMENT_TARGET=15.0;SWIFT_VERSION=5.0;SWIFT_OPTIMIZATION_LEVEL="-O";};name=Release;};
+000000000000000000000010 = {isa=XCBuildConfiguration;buildSettings={PRODUCT_BUNDLE_IDENTIFIER=lab.remote.controller;PRODUCT_NAME="$(TARGET_NAME)";INFOPLIST_FILE=Info.plist;TARGETED_DEVICE_FAMILY="1,2";CODE_SIGN_STYLE=Automatic;SWIFT_EMIT_LOC_STRINGS=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks";};name=Debug;};
+000000000000000000000011 = {isa=XCBuildConfiguration;buildSettings={PRODUCT_BUNDLE_IDENTIFIER=lab.remote.controller;PRODUCT_NAME="$(TARGET_NAME)";INFOPLIST_FILE=Info.plist;TARGETED_DEVICE_FAMILY="1,2";CODE_SIGN_STYLE=Automatic;SWIFT_EMIT_LOC_STRINGS=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks";};name=Release;};
+000000000000000000000025 = {isa=XCBuildConfiguration;buildSettings={GENERATE_INFOPLIST_FILE=YES;PRODUCT_BUNDLE_IDENTIFIER=lab.remote.controller.uitests;PRODUCT_NAME="$(TARGET_NAME)";TARGETED_DEVICE_FAMILY="1,2";TEST_TARGET_NAME=RemoteController;CODE_SIGN_STYLE=Automatic;SWIFT_VERSION=5.0;IPHONEOS_DEPLOYMENT_TARGET=15.0;ENABLE_TESTING_SEARCH_PATHS=YES;ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks @loader_path/Frameworks";};name=Debug;};
+000000000000000000000026 = {isa=XCBuildConfiguration;buildSettings={GENERATE_INFOPLIST_FILE=YES;PRODUCT_BUNDLE_IDENTIFIER=lab.remote.controller.uitests;PRODUCT_NAME="$(TARGET_NAME)";TARGETED_DEVICE_FAMILY="1,2";TEST_TARGET_NAME=RemoteController;CODE_SIGN_STYLE=Automatic;SWIFT_VERSION=5.0;IPHONEOS_DEPLOYMENT_TARGET=15.0;ENABLE_TESTING_SEARCH_PATHS=YES;ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES;LD_RUNPATH_SEARCH_PATHS="$(inherited) @executable_path/Frameworks @loader_path/Frameworks";};name=Release;};
+00000000000000000000000C = {isa=XCConfigurationList;buildConfigurations=(00000000000000000000000E,00000000000000000000000F,);defaultConfigurationIsVisible=0;defaultConfigurationName=Release;};
+00000000000000000000000D = {isa=XCConfigurationList;buildConfigurations=(000000000000000000000010,000000000000000000000011,);defaultConfigurationIsVisible=0;defaultConfigurationName=Release;};
+000000000000000000000024 = {isa=XCConfigurationList;buildConfigurations=(000000000000000000000025,000000000000000000000026,);defaultConfigurationIsVisible=0;defaultConfigurationName=Release;};
+};rootObject=000000000000000000000001;}
