@@ -24,4 +24,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate real managed Docker install and data-preserving lifecycle
-        run: python3 scripts/integration_manage.py
+        run: sudo python3 scripts/integration_manage.py
