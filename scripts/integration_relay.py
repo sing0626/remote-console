@@ -23,7 +23,10 @@ subprocess.run(['ip','address','add',fixture_ip+'/32','dev',interface],check=Tru
 subprocess.run(['ip','address','add',peer_ip+'/32','dev',interface],check=True)
 try:
     args=argparse.Namespace(public_ip=fixture_ip,interface=interface,port=3478)
-    relay.install(args)
+    environment=os.environ.copy()
+    environment['HALFCLOUD_RELAY_REF']=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+    subprocess.run(['bash',str(Path(__file__).resolve().parents[1]/'relay-install.sh'),'install',
+                    '--public-ip',fixture_ip,'--interface',interface],env=environment,check=True)
     profile=relay.config()
     with (relay.ETC/'turnserver.conf').open('a') as output:output.write('\nverbose\n')
     subprocess.run(['systemctl','restart',relay.SERVICE],check=True)
