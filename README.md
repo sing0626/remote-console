@@ -5,16 +5,24 @@
 此倉庫只提供通用程式碼及範本。沒有預設伺服器網址、固定電話身份、公私鑰、個人部署資料、簽署金鑰、已簽名 App、實機錄影或舊部署歷史。每個新部署都使用自己的網址及電話公鑰，並產生獨立的隧道、TURN 和信任控制端資料。
 
 
-## 統一版本 0.4.0
+## 統一版本 0.4.1
 
-四個元件使用同一份 `release.json`（0.4.0 / 1040）及 `branding/icon.svg`：iOS 控制端、Android 控制端、Android 受控端、VPS 服務。原生控制端有統一品牌、裝置入口、版本標示及獨立串流數據列；數據不再覆蓋電話畫面。iOS 保留互動 Liquid Glass capsule，並非 WebView。
+四個元件使用同一份 `release.json`（0.4.1 / 1041）及 `branding/icon.svg`：iOS 控制端、Android 控制端、Android 受控端、VPS 服務。原生控制端有統一品牌、裝置入口、版本標示及獨立串流數據列；數據不再覆蓋電話畫面。iOS 保留互動 Liquid Glass capsule，並非 WebView。
 
-通用 APK、未簽名 IPA 及精簡伺服器套件見 [0.4.0 發佈頁](https://github.com/sing0626/remote-console/releases/tag/v0.4.0)。公開 App 不預設伺服器或電話身份。既有不同簽署／套件的私人安裝必須使用其原簽署的相容升級 APK，不能藉清除資料或重裝來保留既有授權。
+通用 APK、未簽名 IPA 及精簡伺服器套件見 [0.4.1 發佈頁](https://github.com/sing0626/remote-console/releases/tag/v0.4.1)。公開 App 不預設伺服器或電話身份。0.4.1 統一改用下列 App ID；相對舊套件屬全新 App，可並存，不能直接覆蓋或自動讀取舊 App 的授權憑證。請保留舊 App 和資料，新控制端首次批准一次，之後免 PIN 登入。iOS 重新簽署時須使用新 Bundle ID。
+
+| 元件 | App ID / Bundle ID |
+| --- | --- |
+| Android 控制端 | `com.sing.halfcloud.controller` |
+| Android 受控端 | `com.sing.halfcloud.server` |
+| iOS 控制端 | `com.sing.halfcloud.controller` |
+
+VPS 為 Docker／命令列服務，沒有手機 App ID；名稱、Icon 及版本同樣沿用半雲電話。既有受控電話的 Root 工作目錄、電話身份及授權資料須沿用原有位置；通用公開版使用 `/data/local/tmp/remote-console`，不會自動遷移其他部署資料。
 
 舊版伺服器統一升級命令（root）：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.0/install.sh) upgrade --release v0.4.0
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.1/install.sh) upgrade --release v0.4.1
 remote-console
 ```
 
@@ -40,9 +48,9 @@ python3 scripts/build_frpc.py --go go
 gradle :app:assembleDebug :controller:assembleDebug
 ```
 
-受控端目前需要 ARM64 Android 及可用 Root。一般 ADB 與 Root 自投屏途徑保留不同 capture server。iOS 本地建置需要 Xcode 26 或更新版本；亦可直接下載 [iOS 0.4.0 未簽名 IPA](https://github.com/sing0626/remote-console/releases/tag/v0.4.0)，或手動啟動 `Verify iOS playback and trusted login` workflow，勾選 `publish_ipa`。Windows 使用者毋須本地 Mac，IPA 安裝前仍須自行簽署。
+受控端目前需要 ARM64 Android 及可用 Root。一般 ADB 與 Root 自投屏途徑保留不同 capture server。iOS 本地建置需要 Xcode 26 或更新版本；亦可直接下載 [iOS 0.4.1 未簽名 IPA](https://github.com/sing0626/remote-console/releases/tag/v0.4.1)，或手動啟動 `Verify iOS playback and trusted login` workflow，勾選 `publish_ipa`。Windows 使用者毋須本地 Mac，IPA 安裝前仍須自行簽署。
 
-iOS 0.4.0 使用播放專用 PCM 音訊裝置，不要求麥克風權限；首次電話批准後將憑證存於 Keychain，之後免 PIN 重連。CI 會驗證有聲 PCM、兩電話切換、重新連線及撤銷後重新批准；每個版本的具體結果以發佈頁列出的 CI 記錄為準。實體 iPhone、音訊路由／中斷及不同公網環境仍需在自己的環境驗收。
+iOS 0.4.1 使用播放專用 PCM 音訊裝置，不要求麥克風權限；首次電話批准後將憑證存於 Keychain，之後免 PIN 重連。CI 會驗證有聲 PCM、兩電話切換、重新連線及撤銷後重新批准；每個版本的具體結果以發佈頁列出的 CI 記錄為準。實體 iPhone、音訊路由／中斷及不同公網環境仍需在自己的環境驗收。
 
 ## 建立自己的伺服器
 

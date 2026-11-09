@@ -24,6 +24,18 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("auto_start", false)
         set(value) = sp.edit().putBoolean("auto_start", value).apply()
 
+    // The package can change while the device's root-managed identity stays put.
+    // Read only this receiver's PIN after normal root approval; never import a
+    // controller credential or access another app's Android Keystore.
+    fun restoreExistingRootPin(): Boolean {
+        if (sp.getBoolean("root_pin_checked", false)) return false
+        val result = RootShell.run(listOf("cat", "${RootShell.WORK_DIR}/pairing.pin"), timeoutSeconds = 10)
+        if (!result.ok) return false
+        val existing = result.output.trim()
+        if (!existing.matches(Regex("[0-9]{6}"))) return false
+        return sp.edit().putString("pin", existing).putBoolean("root_pin_checked", true).commit()
+    }
+
     companion object {
         const val DEFAULT_PORT = 8079
     }

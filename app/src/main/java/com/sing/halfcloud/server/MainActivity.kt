@@ -129,10 +129,12 @@ class MainActivity : Activity() {
         rootCheckInFlight = true
         Thread {
             val granted = RootShell.hasRoot()
+            val restoredPin = granted && prefs.restoreExistingRootPin()
             rootGranted = granted
             rootCheckInFlight = false
             handler.post {
                 renderRoot(granted)
+                if (restoredPin && !pinInput.hasFocus()) pinInput.setText(prefs.pin)
                 if (granted && andThenStart) {
                     startServerNow()
                 }

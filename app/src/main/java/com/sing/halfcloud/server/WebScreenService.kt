@@ -92,7 +92,12 @@ class WebScreenService : Service() {
             timeoutSeconds = 15
         )
         if (portState.output.contains("busy")) {
-            ServerState.append("[app] 連接埠 $port 仍被占用，啟動可能失敗（请先停止其他 webscreen 实例）")
+            fail("現有受控服務已使用連接埠 $port；保留原服務及配對，未覆寫程式或設定")
+            return
+        }
+        if (!portState.ok || portState.output.trim() != "free") {
+            fail("無法確認連接埠狀態；未覆寫現有服務或設定")
+            return
         }
 
         val remote = RootShell.REMOTE_BINARY
@@ -163,9 +168,11 @@ class WebScreenService : Service() {
 
     private fun stopServer() {
         val running = process
-        if (running != null) {
-            running.destroy()
+        if (running == null) {
+            ServerState.append("[app] 本 App 未啟動受控服務，保留其他服務")
+            return
         }
+        running.destroy()
         // The binary runs through `exec`, so killing our child stops the server.
         // Its scrcpy server is a grandchild and must be killed too, otherwise it
         // keeps holding the abstract socket and the next session cannot start.
@@ -173,7 +180,7 @@ class WebScreenService : Service() {
         // shell that is running it.
         RootShell.run(
             listOf(
-                "pkill", "-TERM", "-f", "[m]arble-cloud-phone/webscreen"
+                "pkill", "-TERM", "-f", "'${RootShell.REMOTE_BINARY.replace("webscreen", "[w]ebscreen")}'"
             ),
             timeoutSeconds = 20
         )
