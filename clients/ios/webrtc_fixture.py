@@ -5,6 +5,7 @@ import logging
 import secrets
 import math
 import array
+import os
 
 from aiohttp import web
 from aiortc import AudioStreamTrack, RTCConfiguration, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
@@ -14,7 +15,10 @@ from av import VideoFrame
 class Pattern(VideoStreamTrack):
     async def recv(self):
         pts, time_base = await self.next_timestamp()
-        frame = VideoFrame(640, 360, "yuv420p")
+        light = os.environ.get('HALFCLOUD_FIXTURE_LIGHT') == '1'
+        if light:
+            await asyncio.sleep(.16)
+        frame = VideoFrame(320 if light else 640, 180 if light else 360, "yuv420p")
         for index, plane in enumerate(frame.planes):
             value = (40 + int(pts / 3000) % 160) if index == 0 else (100 if index == 1 else 160)
             plane.update(bytes([value]) * plane.buffer_size)

@@ -11,7 +11,8 @@ OUT = Path('ui-evidence')
 OUT.mkdir(exist_ok=True)
 
 def adb(*args):
-    return subprocess.check_output(['adb', *map(str, args)], stderr=subprocess.STDOUT, timeout=45)
+    timeout = 240 if args and args[0] == 'install' else 45
+    return subprocess.check_output(['adb', *map(str, args)], stderr=subprocess.STDOUT, timeout=timeout)
 
 def tree():
     adb('shell', 'uiautomator', 'dump', '--compressed', '/sdcard/halfcloud-test-ui.xml')
