@@ -19,11 +19,21 @@ struct FileShare: UIViewControllerRepresentable {
 }
 
 @MainActor final class NativeToolsModel: ObservableObject {
-    @Published var folder = "", files: [PhoneFile] = [], nextOffset = -1
-    @Published var message = "", progress = 0.0, busy = false
-    @Published var command = "", output = "$ ", scriptName = "", scripts: [SavedCommand] = []
-    @Published var running = false, jobID = ""
-    @Published var deviceSummary = "正在讀取電話狀態…", relaySummary = "正在讀取中繼流量…", warning = ""
+    @Published var folder = ""
+    @Published var files: [PhoneFile] = []
+    @Published var nextOffset = -1
+    @Published var message = ""
+    @Published var progress = 0.0
+    @Published var busy = false
+    @Published var command = ""
+    @Published var output = "$ "
+    @Published var scriptName = ""
+    @Published var scripts: [SavedCommand] = []
+    @Published var running = false
+    @Published var jobID = ""
+    @Published var deviceSummary = "正在讀取電話狀態…"
+    @Published var relaySummary = "正在讀取中繼流量…"
+    @Published var warning = ""
     @Published var exported: ExportedFile?
     @Published var pending: PendingTransfer?
     private var work: Task<Void,Never>?, commandWork: Task<Void,Never>?
@@ -130,7 +140,7 @@ struct FileShare: UIViewControllerRepresentable {
     func saveCommand(){let name=scriptName.trimmingCharacters(in:.whitespacesAndNewlines);guard !name.isEmpty,!command.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else{message="請填名稱同指令。";return};scripts.removeAll{$0.id==name};scripts.append(SavedCommand(id:name,command:command));UserDefaults.standard.set(try? JSONEncoder().encode(scripts),forKey:"toolScripts");scriptName="";message="已儲存常用指令。"}
     func deleteCommand(_ name:String){scripts.removeAll{$0.id==name};UserDefaults.standard.set(try? JSONEncoder().encode(scripts),forKey:"toolScripts")}
     func run(_ session:NativeSession,apk:String?=nil){guard !running else{return};running=true;output=apk == nil ? "$ "+command+"\n":"正在安裝 APK…\n";outputOffset=0
-        commandWork=Task{defer{running=false};do{let value=try await session.tool("POST",apk == nil ? "/api/tools/terminal/jobs":"/api/tools/apk/install",body:apk.map{["path":$0]} ?? ["command":command,"timeout_seconds":120]);guard let id=value["id"] as? String else{throw CocoaError(.coderReadCorrupt)};jobID=id
+        commandWork=Task{defer{running=false};do{let payload:[String:Any] = apk.map{["path":$0] as [String:Any]} ?? ["command":command,"timeout_seconds":120];let value=try await session.tool("POST",apk == nil ? "/api/tools/terminal/jobs":"/api/tools/apk/install",body:payload);guard let id=value["id"] as? String else{throw CocoaError(.coderReadCorrupt)};jobID=id
             while !Task.isCancelled {let result=try await session.tool("GET","/api/tools/terminal/jobs/\(id)?offset=\(outputOffset)");outputOffset=(result["offset"] as? NSNumber)?.int64Value ?? outputOffset;output+=result["output"] as? String ?? "";if output.count>131072{output=String(output.suffix(131072))};if result["done"] as? Bool==true{output+="\n[結束代碼 \(result["exit_code"] ?? -1)]";jobID="";break};try await Task.sleep(nanoseconds:450_000_000)}
         }catch{message=error.localizedDescription}}
     }
@@ -153,8 +163,10 @@ struct NativeToolsView: View {
     @ObservedObject var model:NativeToolsModel
     @ObservedObject var session:NativeSession
     let close:()->Void
-    @State private var importer=false, folderName=""
-    @State private var deletion:PhoneFile?, installation:PhoneFile?
+    @State private var importer=false
+    @State private var folderName=""
+    @State private var deletion:PhoneFile?
+    @State private var installation:PhoneFile?
     private var title:String {page == .files ? "電話檔案":page == .terminal ? "Root 終端":"電話與中繼"}
     var body:some View {
         ZStack {ConsoleBackdrop();ScrollView {VStack(alignment:.leading,spacing:18){

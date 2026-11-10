@@ -206,7 +206,8 @@ func (m *Manager) installAPK(w http.ResponseWriter, r *http.Request) {
 			return nil, nil, errors.New("invalid apk")
 		}
 		cmd := exec.CommandContext(ctx, "/system/bin/pm", "install", "-r", "--user", "0", "-S", strconv.FormatInt(info.Size(), 10))
-		cmd.Stdin = f
+		// A pipe avoids passing a FUSE-labelled /sdcard fd to system_server over Binder.
+		cmd.Stdin = io.NewSectionReader(f, 0, info.Size())
 		return cmd, f, nil
 	})
 }
