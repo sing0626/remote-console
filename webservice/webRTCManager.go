@@ -1,13 +1,16 @@
 package webservice
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 	sagent "webscreen/streamAgent"
+	"webscreen/utils"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
@@ -35,6 +38,8 @@ const (
 )
 
 type Subscriber struct {
+	Owner                string
+	QualityToken         string
 	channelMu            sync.RWMutex
 	inputSlot            uint32
 	PeerConnection       *webrtc.PeerConnection
@@ -49,6 +54,7 @@ type Subscriber struct {
 }
 
 type DeviceBroadcaster struct {
+	Config             sagent.AgentConfig
 	StreamOptions      map[string]string
 	Pending            int
 	Input              *sharedInput
@@ -126,6 +132,9 @@ func NewWebRTCManager() *WebRTCManager {
 }
 
 func (manager *WebRTCManager) NewSubscriber(deviceIdentifier string, clientSDP string, AgentConfig sagent.AgentConfig) (string, uint32, error) {
+	if !manager.hasRelayRegion(AgentConfig.RelayRegion) {
+		return "", 0, fmt.Errorf("unknown_relay_region")
+	}
 	manager.newSubscriberMu.Lock()
 	defer manager.newSubscriberMu.Unlock()
 	offer := webrtc.SessionDescription{
@@ -163,7 +172,7 @@ func (manager *WebRTCManager) NewSubscriber(deviceIdentifier string, clientSDP s
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i), webrtc.WithSettingEngine(settingEngine))
 	// Configure ICE servers (STUN) for NAT traversal
 	config := webrtc.Configuration{
-		ICEServers: manager.iceServers(),
+		ICEServers: manager.iceServersForRegion(AgentConfig.RelayRegion),
 	}
 	// Create PeerConnection
 	peerConnection, err := api.NewPeerConnection(config)
@@ -222,6 +231,7 @@ func (manager *WebRTCManager) NewSubscriber(deviceIdentifier string, clientSDP s
 		broadcaster.CodecKey = codecKey
 	}
 	broadcaster.RequestedConfigKey = requestedKey
+	broadcaster.Config = AgentConfig
 	broadcaster.StreamOptions = make(map[string]string)
 	for k, v := range AgentConfig.DriverConfig {
 		broadcaster.StreamOptions[k] = v
@@ -297,7 +307,9 @@ func (manager *WebRTCManager) NewSubscriber(deviceIdentifier string, clientSDP s
 		slot++
 	}
 	sub := &Subscriber{
-		inputSlot: slot, PeerConnection: peerConnection,
+		Owner:        AgentConfig.Owner,
+		QualityToken: rand.Text(),
+		inputSlot:    slot, PeerConnection: peerConnection,
 		rtpSenderVideo: rtpSenderVideo,
 		rtpSenderAudio: rtpSenderAudio,
 	}
@@ -366,6 +378,11 @@ func (manager *WebRTCManager) ensureAgent(deviceIdentifier string, receiptNo uin
 		copied[k] = v
 	}
 	agentConfig.DriverConfig = copied
+	if broadcaster.Agent != nil && broadcaster.Agent.Alive() {
+		if rate := broadcaster.StreamOptions["video_bit_rate"]; rate != "" {
+			agentConfig.DriverConfig["video_bit_rate"] = rate
+		}
+	}
 	configKey := agentConfigKey(agentConfig)
 	if broadcaster.Agent != nil && (!broadcaster.Agent.Alive() || broadcaster.AgentConfigKey != configKey) {
 		// The previous scrcpy session is gone (or the settings changed): throw it
@@ -439,6 +456,56 @@ func (manager *WebRTCManager) ensureAgent(deviceIdentifier string, receiptNo uin
 	manager.Unlock()
 
 	return nil
+}
+
+// Only the oldest active subscriber adjusts the common encoder. Other viewers
+// keep their media and controls while following the same live bitrate.
+func (manager *WebRTCManager) SetAdaptiveRate(owner, token string, bitrate int) (any, error) {
+	manager.newSubscriberMu.Lock()
+	defer manager.newSubscriberMu.Unlock()
+	manager.Lock()
+	defer manager.Unlock()
+	for _, b := range manager.broadcasters {
+		b.Lock.RLock()
+		var found *Subscriber
+		leader := uint32(^uint32(0))
+		var number uint32
+		for receipt, sub := range b.Subscribers {
+			if receipt < leader {
+				leader = receipt
+			}
+			if sub.QualityToken == token && sub.Owner == owner {
+				found = sub
+				number = receipt
+			}
+		}
+		b.Lock.RUnlock()
+		if found == nil {
+			continue
+		}
+		current, _ := utils.ParseBitrate(b.StreamOptions["video_bit_rate"])
+		if number != leader {
+			return map[string]any{"applied": false, "leader": false, "bitrate": current}, nil
+		}
+		if b.Agent == nil {
+			return nil, fmt.Errorf("encoder_unavailable")
+		}
+		if err := b.Agent.SetVideoBitrate(bitrate); err != nil {
+			return nil, err
+		}
+		b.StreamOptions["video_bit_rate"] = strconv.Itoa(bitrate)
+		config := b.Config
+		config.DriverConfig = make(map[string]string, len(b.StreamOptions))
+		for k, v := range b.StreamOptions {
+			config.DriverConfig[k] = v
+		}
+		b.Config = config
+		key := agentConfigKey(config)
+		b.RequestedConfigKey = key
+		b.AgentConfigKey = key
+		return map[string]any{"applied": true, "leader": true, "bitrate": bitrate}, nil
+	}
+	return nil, fmt.Errorf("stream_not_found")
 }
 
 func (manager *WebRTCManager) GetAgent(deviceIdentifier string) (*sagent.Agent, bool) {

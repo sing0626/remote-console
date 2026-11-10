@@ -2,10 +2,24 @@ package scrcpy
 
 import (
 	"encoding/binary"
+	"fmt"
 	"log"
 	"time"
 	"webscreen/sdriver"
 )
+
+func (da *ScrcpyDriver) SetVideoBitrate(bitrate int) error {
+	if bitrate < 500000 || bitrate > 32000000 || da.controlConn == nil {
+		return fmt.Errorf("encoder_unavailable")
+	}
+	message := make([]byte, 5)
+	message[0] = 0x70
+	binary.BigEndian.PutUint32(message[1:], uint32(bitrate))
+	_ = da.controlConn.SetWriteDeadline(time.Now().Add(time.Second))
+	defer da.controlConn.SetWriteDeadline(time.Time{})
+	_, err := da.controlConn.Write(message)
+	return err
+}
 
 func (da *ScrcpyDriver) SendTouchEvent(e *sdriver.TouchEvent) {
 	if da.controlConn == nil {

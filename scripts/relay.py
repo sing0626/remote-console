@@ -21,8 +21,10 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
+import urllib.parse
 
-VERSION = '0.4.2'
+VERSION = '0.5.0'
 OWNER = 'halfcloud-relay'
 ETC = Path('/etc/halfcloud-relay')
 APP = Path('/usr/local/lib/halfcloud-relay/relay.py')
@@ -323,6 +325,7 @@ WantedBy=timers.target
     print(f"請放行 TCP / UDP {value['port']}，以及 UDP 49160–49260。")
     print('輸入 remote-console-relay 開啟選單；traffic 查看流量。')
     export_link(value)
+    if value.get('gateway_origin'): configure_reporting(value['gateway_origin'])
 
 
 def _attr(kind, data):
@@ -450,13 +453,24 @@ def connect_gateway(manager, profile=None, restore=False, check=probe):
     else:
         profile = validate_profile(profile)
         check(profile)
-        updated = (json.dumps({'stun_urls': [f"stun:{profile['public_ip']}:{profile['port']}"],
-                  'turn_urls': [f"turn:{profile['public_ip']}:{profile['port']}?transport=udp", f"turn:{profile['public_ip']}:{profile['port']}?transport=tcp"],
-                  'turn_shared_secret': profile['secret']}, indent=2)+'\n').encode()
+        primary = dict(stun_urls=[f"stun:{profile['public_ip']}:{profile['port']}"],
+                       turn_urls=[f"turn:{profile['public_ip']}:{profile['port']}?transport=udp", f"turn:{profile['public_ip']}:{profile['port']}?transport=tcp"],
+                       turn_shared_secret=profile['secret'])
+        original = json.loads(base64.b64decode(state['original_primary'])) if state else json.loads((data/'ice.private.json').read_bytes())
+        regions = [dict(id='hk', name='香港', **primary)]
+        if original.get('turn_urls') and original.get('turn_shared_secret') and original.get('turn_shared_secret') != profile['secret']:
+            regions.append(dict(id='jp', name='日本', **{k:original[k] for k in ['stun_urls','turn_urls','turn_shared_secret'] if k in original}))
+        updated = (json.dumps(dict(primary, relay_regions=regions), indent=2)+'\n').encode()
         digest = hashlib.sha256(updated).hexdigest()
         if state and state.get('applied_sha256') == digest and all(p.read_bytes() == updated for p in paths):
             print('已接駁至同一香港中繼。'); return
         targets = {path: updated for path in paths}
+    node_path = data/'relay-nodes.json'
+    old_nodes = node_path.read_bytes() if node_path.exists() else None
+    if restore:
+        new_nodes = base64.b64decode(state['original_nodes']) if state.get('original_nodes') else None
+    else:
+        new_nodes = (json.dumps([dict(id=relay_id(profile), name='香港', key=report_key(profile).hex())])+'\n').encode()
     before = {path: path.read_bytes() for path in paths}
     for value in before.values():
         if not isinstance(json.loads(value), dict): raise ValueError('原有 ICE 設定無效')
@@ -465,10 +479,12 @@ def connect_gateway(manager, profile=None, restore=False, check=probe):
     for path, value in before.items(): atomic(backup/path.relative_to(data), value)
     try:
         for path, value in targets.items(): atomic(path, value)
+        atomic(node_path,new_nodes) if new_nodes is not None else node_path.unlink(missing_ok=True)
         manager.compose('up', '-d', '--force-recreate', 'gateway')
         if not manager.healthy(): raise RuntimeError('入口健康檢查失敗')
     except BaseException:
         for path, value in before.items(): atomic(path, value)
+        atomic(node_path,old_nodes) if old_nodes is not None else node_path.unlink(missing_ok=True)
         manager.compose('up', '-d', '--force-recreate', 'gateway')
         if not manager.healthy():
             raise RuntimeError('已還原網絡設定；入口仍未恢復，請檢查 remote-console logs')
@@ -480,11 +496,94 @@ def connect_gateway(manager, profile=None, restore=False, check=probe):
         originals = state['originals'] if state else {str(p.relative_to(data)): base64.b64encode(b).decode() for p, b in before.items()}
         primary = state['original_primary'] if state else base64.b64encode(before[data/'ice.private.json']).decode()
         write_json(state_path, dict(schema=1, applied_sha256=digest, originals=originals, original_primary=primary,
-                                   relay_ip=profile['public_ip'], backup=str(backup)))
+                                   relay_ip=profile['public_ip'], backup=str(backup), original_nodes=state.get('original_nodes') if state else (base64.b64encode(old_nodes).decode() if old_nodes else None)))
     print('入口：https://'+cfg['domain']+'/control')
     print('已'+('還原原有' if restore else '接駁香港')+'中繼；電話配對及控制端授權沿用。')
     print('受控端 0.4.2 或更新版本會於約一分鐘內同步，新連線生效。')
     print('網絡設定備份：'+str(backup))
+
+
+def relay_id(profile):
+    return hashlib.sha256(f"{profile['public_ip']}:{profile['port']}".encode()).hexdigest()[:24]
+
+
+def report_key(profile):
+    return hashlib.sha256(('halfcloud-relay-stats:'+profile['secret']).encode()).digest()
+
+
+def upgrade_gateway_relays(manager):
+    data = manager.p.data
+    if not (data/'relay-link-state.json').exists(): return
+    current = json.loads((data/'ice.private.json').read_bytes())
+    state = json.loads((data/'relay-link-state.json').read_bytes())
+    url = urllib.parse.urlparse(current['turn_urls'][0])
+    match = re.match(r'^turn:([^:]+):(\d+)',current['turn_urls'][0])
+    if not match or match[1] != state['relay_ip']: raise ValueError('原有中繼設定已變更，請先核對')
+    profile = dict(schema=1,kind=OWNER,public_ip=match[1],port=int(match[2]),secret=current['turn_shared_secret'])
+    connect_gateway(manager,profile,check=lambda _:None)
+
+
+def usage_summary(value, result, now=None):
+    now = now or dt.datetime.now(__import__('zoneinfo').ZoneInfo('Asia/Hong_Kong'))
+    interface = next(x for x in result['interfaces'] if x['name']==value['interface'])
+    traffic = interface['traffic']
+    def period(name):
+        for item in traffic.get(name,[]):
+            date=item['date']
+            if date['year']==now.year and date['month']==now.month and (name=='month' or date['day']==now.day):
+                return {key:int(item[key]) for key in ['rx','tx']}
+        return dict(rx=0,tx=0)
+    return dict(id=relay_id(value),at=int(time.time()),day=period('day'),month=period('month'),
+                total={key:int(traffic['total'][key]) for key in ['rx','tx']},quota_gb=value.get('quota_gb') or 0,count=value.get('count','tx'))
+
+
+def report_origin(raw):
+    url = urllib.parse.urlparse(raw)
+    if url.scheme!='https' or not url.hostname or url.username or url.password or url.path not in ['', '/'] or url.query or url.fragment:
+        raise ValueError('請輸入現有入口嘅 HTTPS 網址，例如 https://control.example.com')
+    return raw.rstrip('/')
+
+
+def configure_reporting(origin):
+    value=config();value['gateway_origin']=report_origin(origin);write_json(ETC/'config.json',value)
+    atomic(UNITS/'halfcloud-relay-report.service',f"""[Unit]
+Description=Report HalfCloud relay traffic
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 {APP} report
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+PrivateTmp=yes
+MemoryMax=96M
+""",0o644)
+    atomic(UNITS/'halfcloud-relay-report.timer',"""[Unit]
+Description=Update HalfCloud traffic dashboard
+[Timer]
+OnBootSec=30sec
+OnUnitActiveSec=60sec
+[Install]
+WantedBy=timers.target
+""",0o644)
+    run('systemctl','daemon-reload');run('systemctl','enable','--now','halfcloud-relay-report.timer')
+    send_report()
+
+
+def send_report():
+    value=config()
+    if not value.get('gateway_origin'): return
+    summary=usage_summary(value,json.loads(vnstat('--json',capture=True).stdout))
+    summary['active']=run('systemctl','is-active','--quiet',SERVICE,check=False).returncode==0
+    body=json.dumps(summary,separators=(',',':')).encode();stamp=str(summary['at'])
+    sig=hmac.new(report_key(value),(stamp+'\n'+hashlib.sha256(body).hexdigest()).encode(),hashlib.sha256).hexdigest()
+    request=urllib.request.Request(report_origin(value['gateway_origin'])+'/_remoteconsole/relays/report',body,
+        headers={'Content-Type':'application/json','X-HalfCloud-Time':stamp,'X-HalfCloud-Signature':sig},method='POST')
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self,*args,**kwargs): return None
+    with urllib.request.build_opener(NoRedirect()).open(request,timeout=20) as response:
+        if response.status!=204: raise ValueError('流量回報未成功')
+    print('已更新入口流量面板。')
 
 
 def japan(args):
@@ -539,9 +638,10 @@ def traffic(args):
 def uninstall():
     config()
     run('systemctl', 'disable', '--now', SERVICE, STATS, TIMER)
-    for name in [SERVICE, STATS, TIMER, 'halfcloud-relay-logrotate.service']:
+    for name in [SERVICE, STATS, TIMER, 'halfcloud-relay-logrotate.service', 'halfcloud-relay-report.service', 'halfcloud-relay-report.timer']:
         (UNITS/name).unlink(missing_ok=True)
     run('systemctl', 'daemon-reload')
+    run('systemctl','disable','--now','halfcloud-relay-report.timer',check=False)
     LAUNCHER.unlink(missing_ok=True)
     APP.unlink(missing_ok=True)
     print('中繼已解除安裝；設定、統計及日誌保留，重新執行安裝可啟用。')
@@ -573,6 +673,8 @@ def _execute(args):
     command = args.command
     if command == 'install': install(args)
     elif command in ['connect', 'disconnect']: japan(args)
+    elif command == 'report-to': configure_reporting(args.origin or input('日本入口 HTTPS 網址：').strip())
+    elif command == 'report': send_report()
     elif command == 'traffic': traffic(args)
     elif command == 'live': vnstat('--live')
     elif command == 'link': export_link(config())
@@ -596,9 +698,10 @@ def _execute(args):
 
 def main():
     p = argparse.ArgumentParser(description='半雲電話 · 香港中繼管理')
-    p.add_argument('command', nargs='?', choices=['install', 'connect', 'disconnect', 'status', 'traffic', 'live', 'link', 'check', 'start', 'stop', 'restart', 'logs', 'quota', 'update', 'uninstall'])
+    p.add_argument('command', nargs='?', choices=['install', 'connect', 'disconnect', 'status', 'traffic', 'live', 'link', 'check', 'start', 'stop', 'restart', 'logs', 'quota', 'update', 'uninstall', 'report', 'report-to'])
     p.add_argument('gb', nargs='?', type=int)
     p.add_argument('--version', action='version', version=VERSION)
+    p.add_argument('--origin')
     p.add_argument('--public-ip'); p.add_argument('--interface'); p.add_argument('--port', type=int, default=3478)
     p.add_argument('--link-file', type=Path); p.add_argument('--json', action='store_true'); p.add_argument('--count', choices=['tx', 'total'], default='tx')
     args = p.parse_args()
@@ -608,7 +711,7 @@ def main():
     if interactive and not sys.stdin.isatty(): sys.stdin = open('/dev/tty')
     try:
         if args.command: execute(args); return
-        choices = [('status','狀態及流量'),('traffic','每日／每月流量'),('live','即時流量'),('link','顯示日本接駁碼'),('check','檢查 TURN 認證'),('restart','重新啟動'),('update','更新'),('uninstall','解除安裝')]
+        choices = [('status','狀態及流量'),('traffic','每日／每月流量'),('live','即時流量'),('link','顯示日本接駁碼'),('check','檢查 TURN 認證'),('report-to','接駁入口流量面板'),('restart','重新啟動'),('update','更新'),('uninstall','解除安裝')]
         while True:
             print('\n半雲電話 · 香港中繼 '+VERSION)
             print('\n'.join(f'{i}. {label}' for i, (_, label) in enumerate(choices, 1))+'\n0. 離開')

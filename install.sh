@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generic bootstrap: no personal deployment, credentials or bundled phone identities.
 set -Eeuo pipefail
-rc_release=v0.4.2
+rc_release=v0.5.0
 [[ $(id -u) = 0 ]] || { printf '請用 root 或 sudo bash 執行。\n' >&2; exit 1; }
 [[ $(uname -s) = Linux ]] || { printf '此安裝器需要 Linux。\n' >&2; exit 1; }
 if [[ "${1:-}" = upgrade ]]; then

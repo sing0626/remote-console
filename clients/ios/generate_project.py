@@ -12,7 +12,7 @@ info['CFBundleVersion']=str(release['build'])
 info['CFBundleDisplayName']=brand['name']
 (root/'Info.plist').write_bytes(plistlib.dumps(info,sort_keys=False))
 project=root/'RemoteController.xcodeproj';project.mkdir(exist_ok=True)
-ids={name:f'{index:024X}' for index,name in enumerate(['project','root','products','target','file','info','product','buildfile','sources','frameworks','resources','projectconfigs','targetconfigs','pd','pr','td','tr','endpoint','endpointbuild','native','nativebuild','protocol','protocolbuild','webrtcpkg','webrtcproduct','webrtcbuild','design','designbuild','uitarget','uitfile','uitproduct','uitbuildfile','uitsources','uitframeworks','uitresources','uitconfigs','uitdebug','uitrelease','uitdependency','uitproxy','trust','trustbuild','audioh','audiom','audiobuild','bridge','assets','assetsbuild'],1)}
+ids={name:f'{index:024X}' for index,name in enumerate(['project','root','products','target','file','info','product','buildfile','sources','frameworks','resources','projectconfigs','targetconfigs','pd','pr','td','tr','endpoint','endpointbuild','native','nativebuild','protocol','protocolbuild','webrtcpkg','webrtcproduct','webrtcbuild','design','designbuild','uitarget','uitfile','uitproduct','uitbuildfile','uitsources','uitframeworks','uitresources','uitconfigs','uitdebug','uitrelease','uitdependency','uitproxy','trust','trustbuild','audioh','audiom','audiobuild','bridge','assets','assetsbuild','tools','toolsbuild'],1)}
 def i(name):return ids[name]
 objects=[
 f'{i("assets")} = {{isa=PBXFileReference;lastKnownFileType=folder.assetcatalog;path=Assets.xcassets;sourceTree="<group>";}};',
@@ -39,6 +39,8 @@ f'{i("design")} = {{isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path
 f'{i("designbuild")} = {{isa=PBXBuildFile;fileRef={i("design")};}};',
 f'{i("native")} = {{isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=NativeSession.swift;sourceTree="<group>";}};',
 f'{i("nativebuild")} = {{isa=PBXBuildFile;fileRef={i("native")};}};',
+f'{i("tools")} = {{isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=NativeTools.swift;sourceTree="<group>";}};',
+f'{i("toolsbuild")} = {{isa=PBXBuildFile;fileRef={i("tools")};}};',
 f'{i("protocol")} = {{isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=ControlProtocol.swift;sourceTree="<group>";}};',
 f'{i("protocolbuild")} = {{isa=PBXBuildFile;fileRef={i("protocol")};}};',
 f'{i("webrtcpkg")} = {{isa=XCRemoteSwiftPackageReference;repositoryURL="https://github.com/stasel/WebRTC.git";requirement={{kind=exactVersion;version=157.0.0;}};}};',
@@ -50,9 +52,9 @@ f'{i("file")} = {{isa=PBXFileReference;lastKnownFileType=sourcecode.swift;path=R
 f'{i("info")} = {{isa=PBXFileReference;lastKnownFileType=text.plist.xml;path=Info.plist;sourceTree="<group>";}};',
 f'{i("product")} = {{isa=PBXFileReference;explicitFileType=wrapper.application;path=RemoteController.app;sourceTree=BUILT_PRODUCTS_DIR;}};',
 f'{i("buildfile")} = {{isa=PBXBuildFile;fileRef={i("file")};}};',
-f'{i("root")} = {{isa=PBXGroup;children=({i("assets")},{i("uitfile")},{i("file")},{i("design")},{i("endpoint")},{i("native")},{i("trust")},{i("audioh")},{i("audiom")},{i("bridge")},{i("protocol")},{i("info")},{i("products")},);sourceTree="<group>";}};',
+f'{i("root")} = {{isa=PBXGroup;children=({i("assets")},{i("uitfile")},{i("file")},{i("design")},{i("endpoint")},{i("native")},{i("tools")},{i("trust")},{i("audioh")},{i("audiom")},{i("bridge")},{i("protocol")},{i("info")},{i("products")},);sourceTree="<group>";}};',
 f'{i("products")} = {{isa=PBXGroup;children=({i("product")},{i("uitproduct")},);name=Products;sourceTree="<group>";}};',
-f'{i("sources")} = {{isa=PBXSourcesBuildPhase;buildActionMask=2147483647;files=({i("buildfile")},{i("endpointbuild")},{i("nativebuild")},{i("trustbuild")},{i("audiobuild")},{i("protocolbuild")},{i("designbuild")},);runOnlyForDeploymentPostprocessing=0;}};',
+f'{i("sources")} = {{isa=PBXSourcesBuildPhase;buildActionMask=2147483647;files=({i("buildfile")},{i("endpointbuild")},{i("nativebuild")},{i("toolsbuild")},{i("trustbuild")},{i("audiobuild")},{i("protocolbuild")},{i("designbuild")},);runOnlyForDeploymentPostprocessing=0;}};',
 f'{i("frameworks")} = {{isa=PBXFrameworksBuildPhase;buildActionMask=2147483647;files=({i("webrtcbuild")},);runOnlyForDeploymentPostprocessing=0;}};',
 f'{i("resources")} = {{isa=PBXResourcesBuildPhase;buildActionMask=2147483647;files=({i("assetsbuild")},);runOnlyForDeploymentPostprocessing=0;}};',
 f'{i("target")} = {{isa=PBXNativeTarget;buildConfigurationList={i("targetconfigs")};buildPhases=({i("sources")},{i("frameworks")},{i("resources")},);buildRules=();dependencies=();packageProductDependencies=({i("webrtcproduct")},);name=RemoteController;productName=RemoteController;productReference={i("product")};productType="com.apple.product-type.application";}};',

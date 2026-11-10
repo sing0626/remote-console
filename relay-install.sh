@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-rc_release=v0.4.2
+rc_release=v0.5.0
 rc_release=${HALFCLOUD_RELAY_REF:-$rc_release}
 [[ "$rc_release" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "$rc_release" =~ ^[0-9a-f]{40}$ ]] || { printf '版本格式無效。\n' >&2; exit 1; }
 [[ $(id -u) = 0 && $(uname -s) = Linux ]] || { printf '請喺 Linux 用 root 或 sudo bash 執行。\n' >&2; exit 1; }

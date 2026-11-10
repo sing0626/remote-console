@@ -157,6 +157,13 @@ func (sa *Agent) Capabilities() sdriver.DriverCaps {
 	return sa.driver.Capabilities()
 }
 
+func (sa *Agent) SetVideoBitrate(bitrate int) error {
+	if driver, ok := sa.driver.(interface{ SetVideoBitrate(int) error }); ok {
+		return driver.SetVideoBitrate(bitrate)
+	}
+	return fmt.Errorf("adaptive_quality_unavailable")
+}
+
 func (sa *Agent) Start() {
 	err := sa.driver.Start()
 	if err != nil {

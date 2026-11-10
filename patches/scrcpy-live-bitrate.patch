@@ -1,0 +1,77 @@
+diff --git a/server/src/main/java/com/genymobile/scrcpy/control/ControlMessage.java b/server/src/main/java/com/genymobile/scrcpy/control/ControlMessage.java
+index 777873b..332f054 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/control/ControlMessage.java
++++ b/server/src/main/java/com/genymobile/scrcpy/control/ControlMessage.java
+@@ -37,6 +37,13 @@ public final class ControlMessage {
+     public static final int COPY_KEY_COPY = 1;
+     public static final int COPY_KEY_CUT = 2;
+ 
++    public static final int TYPE_SET_VIDEO_BITRATE = 0x70;
++    private int videoBitrate;
++    public static ControlMessage createSetVideoBitrate(int value) {
++        ControlMessage msg = new ControlMessage(); msg.type = TYPE_SET_VIDEO_BITRATE; msg.videoBitrate = value; return msg;
++    }
++    public int getVideoBitrate() { return videoBitrate; }
++
+     private int type;
+     private String text;
+     private int metaState; // KeyEvent.META_*
+diff --git a/server/src/main/java/com/genymobile/scrcpy/control/ControlMessageReader.java b/server/src/main/java/com/genymobile/scrcpy/control/ControlMessageReader.java
+index b2591d6..866ea24 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/control/ControlMessageReader.java
++++ b/server/src/main/java/com/genymobile/scrcpy/control/ControlMessageReader.java
+@@ -25,6 +25,8 @@ public class ControlMessageReader {
+     public ControlMessage read() throws IOException {
+         int type = dis.readUnsignedByte();
+         switch (type) {
++            case ControlMessage.TYPE_SET_VIDEO_BITRATE:
++                return ControlMessage.createSetVideoBitrate(dis.readInt());
+             case ControlMessage.TYPE_INJECT_KEYCODE:
+                 return parseInjectKeycode();
+             case ControlMessage.TYPE_INJECT_TEXT:
+diff --git a/server/src/main/java/com/genymobile/scrcpy/control/Controller.java b/server/src/main/java/com/genymobile/scrcpy/control/Controller.java
+index 55d6e11..17f5221 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/control/Controller.java
++++ b/server/src/main/java/com/genymobile/scrcpy/control/Controller.java
+@@ -334,6 +334,9 @@ public class Controller implements AsyncProcessor, VirtualDisplayListener {
+ 
+         // Events for all sources (display or camera)
+         switch (type) {
++            case ControlMessage.TYPE_SET_VIDEO_BITRATE:
++                if (surfaceCapture != null) { surfaceCapture.getCaptureControl().setVideoBitrate(msg.getVideoBitrate()); }
++                return true;
+             case ControlMessage.TYPE_RESET_VIDEO:
+                 resetVideo();
+                 return true;
+diff --git a/server/src/main/java/com/genymobile/scrcpy/video/CaptureControl.java b/server/src/main/java/com/genymobile/scrcpy/video/CaptureControl.java
+index 7933ea7..1cf1739 100644
+--- a/server/src/main/java/com/genymobile/scrcpy/video/CaptureControl.java
++++ b/server/src/main/java/com/genymobile/scrcpy/video/CaptureControl.java
+@@ -10,6 +10,20 @@ public class CaptureControl {
+     public static final int RESET_REASON_CLIENT_RESIZED = 1 << 3;
+ 
+     private int reset = 0;
++    private int videoBitrate;
++
++    public synchronized void setVideoBitrate(int bitrate) {
++        if (bitrate < 500000 || bitrate > 32000000) { return; }
++        videoBitrate = bitrate;
++        applyVideoBitrate();
++    }
++    private void applyVideoBitrate() {
++        if (runningMediaCodec == null || videoBitrate == 0) { return; }
++        android.os.Bundle parameters = new android.os.Bundle();
++        parameters.putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, videoBitrate);
++        try { runningMediaCodec.setParameters(parameters); }
++        catch (IllegalStateException e) { com.genymobile.scrcpy.util.Ln.w("Encoder bitrate update deferred", e); }
++    }
+ 
+     // Current instance of MediaCodec to "interrupt" on reset
+     private MediaCodec runningMediaCodec;
+@@ -38,5 +52,6 @@ public class CaptureControl {
+ 
+     public synchronized void setRunningMediaCodec(MediaCodec runningMediaCodec) {
+         this.runningMediaCodec = runningMediaCodec;
++        applyVideoBitrate();
+     }
+ }

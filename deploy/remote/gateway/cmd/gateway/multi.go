@@ -24,6 +24,7 @@ type deviceGateway struct {
 	byID      map[string]*gatewayDevice
 	defaultID string
 	auth      *controllerAuthority
+	relays    *relayMonitor
 }
 
 func newMultiHandler(devices []*gatewayDevice, defaultID string) http.Handler {
@@ -77,6 +78,26 @@ func (g *deviceGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del(trust.DelegationHeader)
 	if g.auth != nil && strings.HasPrefix(r.URL.Path, trustPrefix) {
 		g.auth.ServeHTTP(w, r)
+		return
+	}
+	if g.relays != nil && r.URL.Path == "/_remoteconsole/relays/report" {
+		g.relays.receive(w, r)
+		return
+	}
+	if g.relays != nil && r.URL.Path == "/_remoteconsole/relays/status" {
+		if r.Method != "GET" {
+			http.Error(w, "method", 405)
+			return
+		}
+		if g.auth == nil {
+			http.Error(w, "authorization required", 401)
+			return
+		}
+		if _, ok, _ := g.auth.identity(r); !ok {
+			http.Error(w, "authorization required", 401)
+			return
+		}
+		g.relays.status(w, r)
 		return
 	}
 	if r.Method == http.MethodGet && r.URL.Path == "/_remoteconsole/devices" {

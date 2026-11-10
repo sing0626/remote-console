@@ -22,6 +22,12 @@ final class NativeSession: NSObject, ObservableObject {
     @Published var videoTrack: RTCVideoTrack?
     @Published var videoWidth = 1080
     @Published var videoHeight = 2400
+    @Published var relayRegions: [[String: String]] = []
+    private var networkPolicy = AdaptiveNetworkPolicy()
+    private var retryCount = 0, currentBitrate = 8_000_000
+    private var activeRegion = "", qualityToken = ""
+    private var retryWork: DispatchWorkItem?
+    private var cookieStore = URLSessionConfiguration.ephemeral.httpCookieStorage
     @Published var approvalCode = ""
     @Published var approvalName = ""
     private static let playback = RCPlaybackAudioDevice()
@@ -53,7 +59,8 @@ final class NativeSession: NSObject, ObservableObject {
     private func valid(_ pc: RTCPeerConnection) -> Bool { peer === pc }
     private enum Failure: LocalizedError {
         case message(String)
-        var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
+        case http(Int)
+        var errorDescription: String? { switch self {case .message(let value): return value;case .http(let code): return "電話暫時未能連接（HTTP \(code)）。"} }
     }
     static func directory(endpoint: URL, username: String, password: String) async throws -> [RemoteHost]? {
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
@@ -96,12 +103,16 @@ final class NativeSession: NSObject, ObservableObject {
         guard let response = response as? HTTPURLResponse else { throw Failure.message("電話回應無效。") }
         if response.statusCode == 429 { throw Failure.message("配對次數過多，請稍後再試。") }
         if response.statusCode == 401 { throw Failure.message(controllerCredential == nil ? "登入或配對已過期，請核對進階設定。" : "控制端授權已失效，請重新連接電話。") }
-        guard response.statusCode == 200 else { throw Failure.message("電話暫時未能連接（HTTP \(response.statusCode)）。") }
+        guard response.statusCode == 200 else { throw Failure.http(response.statusCode) }
         guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw Failure.message("電話回應格式無效。") }
         return value
     }
     func connect(endpoint: URL, pin: String, profile: StreamProfile, username: String = "", password: String = "", deviceID: String? = nil, hostName: String? = nil) {
-        disconnect()
+        retryCount = 0
+        begin(endpoint: endpoint,pin: pin,profile: profile,username: username,password: password,deviceID: deviceID,hostName: hostName)
+    }
+    private func begin(endpoint: URL, pin: String, profile: StreamProfile, username: String, password: String, deviceID: String?, hostName: String?) {
+        retryWork?.cancel(); retryWork = nil; stop(); ready = false; networkPolicy = AdaptiveNetworkPolicy(); currentBitrate = profile.bitrate
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
         components.path = ""; components.query = nil; components.fragment = nil
         guard let origin = components.url else { return }
@@ -109,7 +120,7 @@ final class NativeSession: NSObject, ObservableObject {
         routingDevice = deviceID; routingName = hostName
         resume = (endpoint,pin,profile,username,password,deviceID,hostName)
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 18; configuration.httpShouldSetCookies = true
+        configuration.timeoutIntervalForRequest = 18; configuration.httpShouldSetCookies = true; configuration.httpCookieStorage = cookieStore
         http = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         deviceName = hostName ?? "Android"
         active = true; status = "正在配對"; detail = "正在連接電話"; notice = ""
@@ -130,7 +141,15 @@ final class NativeSession: NSObject, ObservableObject {
                 let sessions = try await request("/api/screen/sessions")
                 guard generation == epoch else { return }
                 if let shared = sessions["stream_options"] as? [String: String], !shared.isEmpty { options = shared; requestedFPS = Int(shared["max_fps"] ?? "") ?? requestedFPS; notice = "已沿用其他連線嘅共用畫質。" } else { options = profile.options }
-                let ice = try await request("/api/ice-config")
+                var ice = try await request("/api/ice-config")
+                let available = ice["relay_regions"] as? [[String: Any]] ?? []
+                relayRegions = available.compactMap { item in guard let id=item["id"] as? String,let name=item["name"] as? String else {return nil};return ["id":id,"name":name] }
+                activeRegion = ""
+                if !relayRegions.isEmpty {
+                    if profile.region == "auto" { activeRegion = relayRegions[retryCount % relayRegions.count]["id"] ?? "" }
+                    else if relayRegions.contains(where: {$0["id"] == profile.region}) { activeRegion = profile.region }
+                    if !activeRegion.isEmpty { ice = try await request("/api/ice-config?region="+activeRegion) }
+                }
                 guard generation == epoch else { return }
                 guard generation == epoch else { return }
                 let config = RTCConfiguration(); config.sdpSemantics = .unifiedPlan
@@ -138,7 +157,7 @@ final class NativeSession: NSObject, ObservableObject {
                     let urls = item["urls"] as? [String] ?? (item["urls"] as? String).map { [$0] } ?? []
                     return urls.isEmpty ? nil : RTCIceServer(urlStrings: urls, username: item["username"] as? String, credential: item["credential"] as? String)
                 }
-                if profile.relay || ice["iceTransportPolicy"] as? String == "relay" { config.iceTransportPolicy = .relay }
+                if profile.relay || (retryCount > 0 && profile.region == "auto" && !relayRegions.isEmpty) || ice["iceTransportPolicy"] as? String == "relay" { config.iceTransportPolicy = .relay }
                 guard let pc = Self.factory.peerConnection(with: config, constraints: RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil), delegate: self) else { throw Failure.message("未能建立原生聲畫引擎。") }
                 peer = pc
                 let receiver = RTCRtpTransceiverInit(); receiver.direction = .recvOnly
@@ -164,7 +183,7 @@ final class NativeSession: NSObject, ObservableObject {
                         }
                     }
                 }
-            } catch { if generation == epoch { fail(error.localizedDescription) } }
+            } catch { if generation == epoch { fail(error.localizedDescription,retry: retryable(error)) } }
         }
     }
     func reconnect(profile: StreamProfile? = nil) { guard let r = resume else { return }; connect(endpoint: r.0, pin: r.1, profile: profile ?? r.2, username: r.3, password: r.4, deviceID: r.5, hostName: r.6) }
@@ -180,7 +199,7 @@ final class NativeSession: NSObject, ObservableObject {
         if !basicUser.isEmpty && origin.scheme == "https" { request.setValue("Basic " + Data("\(basicUser):\(basicPassword)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization") }
         let ws = http.webSocketTask(with: request); socket = ws; ws.resume()
         let generation = epoch
-        let payload: [String: Any] = ["device_type": "android", "device_id": device["device_id"] ?? "", "device_ip": device["ip"] ?? "", "device_port": String(describing: device["port"] ?? "0"), "av_sync": false, "driver_config": options, "sdp": sdp]
+        let payload: [String: Any] = ["device_type": "android", "device_id": device["device_id"] ?? "", "device_ip": device["ip"] ?? "", "device_port": String(describing: device["port"] ?? "0"), "relay_region": activeRegion, "av_sync": false, "driver_config": options, "sdp": sdp]
         Task { @MainActor in
             do {
                 let data = try JSONSerialization.data(withJSONObject: payload)
@@ -197,22 +216,34 @@ final class NativeSession: NSObject, ObservableObject {
                         pc.setRemoteDescription(RTCSessionDescription(type: .answer, sdp: sdp)) { [weak self, weak pc] error in self?.onMain { [weak self, weak pc] in guard let self = self, let pc = pc, self.valid(pc) else { return }; if error != nil { self.fail("聲畫格式未能配對。") } } }
                     }
                     if object["stage"] as? String == "webrtc_metainfo" {
+                        qualityToken = object["quality_token"] as? String ?? ""
                         let caps = object["capabilities"] as? [String: Any] ?? [:]
                         canControl = caps["can_control"] as? Bool ?? false; canClipboard = caps["can_clipboard"] as? Bool ?? false; metadata = true
                         if let media = object["media_meta"] as? [String: Any] { videoWidth = media["width"] as? Int ?? videoWidth; videoHeight = media["height"] as? Int ?? videoHeight }
                         refreshState(); startStats()
                     }
                 }
-            } catch { if generation == epoch { fail(error.localizedDescription) } }
+            } catch { if generation == epoch { fail(error.localizedDescription,retry: retryable(error)) } }
         }
     }
     private func refreshState() {
         let live = connected && metadata && ordered?.readyState == .open
         ready = live && canControl
         status = live ? (canControl ? "已連接 · 可操作" : "已連接 · 只限觀看") : "正在連接"
-        if live { deadline?.cancel(); send(Data([16])) }
+        if live { deadline?.cancel(); send(Data([16])); let generation = epoch; DispatchQueue.main.asyncAfter(deadline: .now()+30) { [weak self] in guard let self=self,self.epoch==generation else{return};self.retryCount=0 } }
     }
-    private func fail(_ value: String) { status = value; notice = value; stop(); ready = false }
+    private func retryable(_ error: Error) -> Bool {
+        if case Failure.http(let code) = error { return code >= 500 }
+        let e=error as NSError; return e.domain == NSURLErrorDomain && e.code != NSURLErrorCancelled && e.code != NSURLErrorUserAuthenticationRequired
+    }
+    private func fail(_ value: String, retry: Bool = true) {
+        guard active else {return};stop(); ready=false
+        guard retry,let r=resume,r.2.autoReconnect else {status=value;notice=value;return}
+        retryCount += 1;let delay=AdaptiveNetworkPolicy.retryDelay(retryCount)
+        status="網絡中斷 · \(Int(delay)) 秒後重連"
+        let work=DispatchWorkItem { [weak self] in guard let self=self,self.active else{return};self.begin(endpoint:r.0,pin:r.1,profile:r.2,username:r.3,password:r.4,deviceID:r.5,hostName:r.6) }
+        retryWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+delay,execute:work)
+    }
     private func stop() {
         cancelControllerApproval()
         approvalCode = ""; approvalName = ""
@@ -220,9 +251,39 @@ final class NativeSession: NSObject, ObservableObject {
         ordered?.delegate = nil; unordered?.delegate = nil; ordered?.close(); unordered?.close(); ordered = nil; unordered = nil
         peer?.delegate = nil; peer?.close(); peer = nil; videoTrack = nil; audioTrack = nil
         socket?.cancel(with: .normalClosure, reason: nil); socket = nil; http?.invalidateAndCancel(); http = nil
-        connected = false; metadata = false; sentOffer = false; localReady = false; canControl = false; canClipboard = false
+        qualityToken = ""; previousFrames = 0; previousBytes = 0; previousTime = Date(); connected = false; metadata = false; sentOffer = false; localReady = false; canControl = false; canClipboard = false
     }
-    func disconnect() { stop(); resume = nil; routingDevice = nil; routingName = nil; controllerCredential = nil; basicUser = ""; basicPassword = ""; active = false; ready = false; status = "未連接"; clipboardText = nil }
+    func disconnect() { retryWork?.cancel();retryWork=nil;retryCount=0;stop(); resume = nil; routingDevice = nil; routingName = nil; controllerCredential = nil; basicUser = ""; basicPassword = ""; active = false; ready = false; status = "未連接"; clipboardText = nil }
+
+    struct ToolError: LocalizedError {
+        let code: Int
+        var errorDescription: String? { code==401 ? "授權已失效，請重新授權。" : "操作未完成（HTTP \(code)）。" }
+    }
+    var toolScope: String { (origin?.absoluteString ?? "")+"/"+(routingDevice ?? "local") }
+    private func toolRequest(_ method:String,_ path:String,body:Data?=nil,headers:[String:String]=[:]) throws -> URLRequest {
+        guard let origin=origin,let url=URL(string:path,relativeTo:origin),http != nil else{throw Failure.message("電話正在重新連接，請稍後續傳。")}
+        var req=URLRequest(url:url);req.httpMethod=method;req.httpBody=body;req.timeoutInterval=60
+        req.setValue(origin.absoluteString,forHTTPHeaderField:"Origin")
+        if let id=routingDevice{req.setValue(id,forHTTPHeaderField:"X-RemoteConsole-Device")}
+        if let credential=controllerCredential{req.setValue(credential,forHTTPHeaderField:"X-RemoteConsole-Controller")}
+        if !basicUser.isEmpty && origin.scheme=="https" {req.setValue("Basic "+Data("\(basicUser):\(basicPassword)".utf8).base64EncodedString(),forHTTPHeaderField:"Authorization")}
+        for (k,v) in headers{req.setValue(v,forHTTPHeaderField:k)};return req
+    }
+    func tool(_ method:String,_ path:String,body:[String:Any]?=nil) async throws -> [String:Any] {
+        let data=try body.map{try JSONSerialization.data(withJSONObject:$0)}
+        return try await toolData(method,path,body:data,headers:["Content-Type":"application/json"])
+    }
+    func toolData(_ method:String,_ path:String,body:Data?=nil,headers:[String:String]=[:]) async throws -> [String:Any] {
+        let request=try toolRequest(method,path,body:body,headers:headers);guard let http=http else{throw Failure.message("連線已結束。")}
+        let(data,raw)=try await http.data(for:request);guard let response=raw as? HTTPURLResponse else{throw Failure.message("電話回應無效。")}
+        guard (200..<300).contains(response.statusCode) else{throw ToolError(code:response.statusCode)}
+        guard data.count<=2*1024*1024,let object=try JSONSerialization.jsonObject(with:data) as? [String:Any] else{throw Failure.message("工具回應無效。")};return object
+    }
+    func toolDownload(_ path:String,headers:[String:String]) async throws -> (URL,HTTPURLResponse) {
+        let request=try toolRequest("GET",path,headers:headers);guard let http=http else{throw Failure.message("連線已結束。")}
+        let(file,raw)=try await http.download(for:request);guard let response=raw as? HTTPURLResponse else{throw Failure.message("電話回應無效。")}
+        guard [200,206,416].contains(response.statusCode) else{try? FileManager.default.removeItem(at:file);throw ToolError(code:response.statusCode)};return(file,response)
+    }
 
     private func authorizationRequest(_ path: String, body: [String: Any]? = nil) async throws -> (Int,[String: Any]) {
         guard let origin = origin, let http = http, let url = URL(string: "/_remoteconsole/trust/"+path, relativeTo: origin) else { throw Failure.message("連線已結束。") }
@@ -303,12 +364,12 @@ final class NativeSession: NSObject, ObservableObject {
         }
     }
     private func updateStats(_ report: RTCStatisticsReport) {
-        var frames = 0.0, bytes = 0.0, fps = 0.0, rtt = 0.0, pairID = "", route = "P2P 直連"
+        var frames = 0.0, bytes = 0.0, fps = 0.0, rtt = 0.0, packets = 0.0, lost = 0.0, jitter = 0.0, pairID = "", route = "P2P 直連"
         let all = report.statistics
         func number(_ item: NSObject?) -> Double { (item as? NSNumber)?.doubleValue ?? 0 }
         for stat in all.values {
             let v = stat.values
-            if stat.type == "inbound-rtp" && (v["kind"] as? String == "video" || v["mediaType"] as? String == "video") { frames = number(v["framesDecoded"]); bytes = number(v["bytesReceived"]); fps = number(v["framesPerSecond"]) }
+            if stat.type == "inbound-rtp" && (v["kind"] as? String == "video" || v["mediaType"] as? String == "video") { packets = number(v["packetsReceived"]); lost = number(v["packetsLost"]); jitter = number(v["jitter"]) * 1000; frames = number(v["framesDecoded"]); bytes = number(v["bytesReceived"]); fps = number(v["framesPerSecond"]) }
             if stat.type == "transport", let id = v["selectedCandidatePairId"] as? String { pairID = id }
         }
         if let pair = all[pairID] {
@@ -318,6 +379,11 @@ final class NativeSession: NSObject, ObservableObject {
         let now = Date(), elapsed = max(0.1, now.timeIntervalSince(previousTime))
         if fps == 0 { fps = max(0,(frames - previousFrames) / elapsed) }
         let rate = max(0,(bytes - previousBytes) * 8 / elapsed / 1_000_000)
+        if let profile=resume?.2,profile.adaptive,!qualityToken.isEmpty,
+           let next=networkPolicy.sample(now: now.timeIntervalSince1970,packets:packets,losses:lost,rtt:rtt,jitter:jitter,current:currentBitrate,ceiling:profile.bitrate) {
+            currentBitrate=next;let generation=epoch,token=qualityToken
+            Task { if let result=try? await tool("POST","/api/tools/quality",body:["token":token,"bitrate":next]),generation==epoch {currentBitrate=result["bitrate"] as? Int ?? currentBitrate} }
+        }
         previousFrames = frames; previousBytes = bytes; previousTime = now
         NSLog("RemoteAudio rendered=%llu nonSilent=%llu available=%d",Self.playback.renderedFrames,Self.playback.nonSilentFrames,Self.playback.outputAvailable ? 1 : 0)
         detail = String(format: "%@ · %.0f ms\n%.0f / %d FPS · %.1f Mbps",route,rtt,fps,requestedFPS,rate)

@@ -55,7 +55,7 @@ class GatewayTests(unittest.TestCase):
         return False
 
     def others(self):
-        return {str(p.relative_to(self.data)): p.read_bytes() for p in self.data.rglob('*') if p.is_file() and p.name not in ['ice.private.json','relay-link-state.json']}
+        return {str(p.relative_to(self.data)): p.read_bytes() for p in self.data.rglob('*') if p.is_file() and p.name not in ['ice.private.json','relay-link-state.json','relay-nodes.json']}
 
     def connect(self, **kwargs):
         relay.connect_gateway(self.manager, PROFILE, check=lambda p:self.probes.append(p), **kwargs)
@@ -66,6 +66,9 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.others(), before)
         for path in relay.profile_paths(self.data):
             self.assertIn('turn:93.184.216.34:3478?transport=udp', json.loads(path.read_bytes())['turn_urls'])
+        regions=json.loads((self.data/'ice.private.json').read_bytes())['relay_regions']
+        self.assertEqual([r['id'] for r in regions],['hk','jp'])
+        self.assertNotEqual(regions[0]['turn_shared_secret'],regions[1]['turn_shared_secret'])
         self.assertEqual(self.calls,[('up','-d','--force-recreate','gateway')])
         self.connect()
         self.assertEqual(len(self.calls),1)

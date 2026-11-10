@@ -27,7 +27,31 @@ struct StreamProfile {
     var size = 1920
     var bitrate = 8_000_000
     var relay = false
+    var region = "auto"
+    var adaptive = true
+    var autoReconnect = true
     var options: [String: String] {
         ["max_fps": String(fps), "max_size": String(size), "video_bit_rate": String(bitrate), "video_codec": "h264", "audio_codec": "opus", "audio": "true", "control": "true", "video_codec_options": "profile=1"]
+    }
+}
+
+struct AdaptiveNetworkPolicy {
+    private var received: Double = -1, lost: Double = -1, lastChange = 0.0
+    private var bad = 0, good = 0
+    static func retryDelay(_ attempt: Int) -> Double { min(30, 2 * pow(2,Double(min(4,max(0,attempt-1))))) }
+    mutating func sample(now: Double, packets: Double, losses: Double, rtt: Double, jitter: Double, current: Int, ceiling: Int) -> Int? {
+        defer { received = packets; lost = losses }
+        guard received >= 0, packets >= received else { return nil }
+        let rx = packets-received, drop = max(0,losses-lost)
+        guard rx+drop >= 20 else { bad=0; good=0; return nil }
+        let fraction = drop/(rx+drop)
+        if fraction > 0.04 || rtt > 450 || jitter > 80 { bad += 1; good=0 }
+        else if fraction < 0.01 && rtt < 220 && jitter < 35 { good += 1; bad=0 }
+        else { bad=0; good=0 }
+        guard now-lastChange >= 7 else { return nil }
+        var next = current
+        if bad >= 3 { next=max(min(1_000_000,ceiling),current*3/4);bad=0;good=0 }
+        else if good >= 15 { next=min(ceiling,current+max(250_000,current/10));bad=0;good=0 }
+        guard next != current else { return nil };lastChange=now;return next
     }
 }

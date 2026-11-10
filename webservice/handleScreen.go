@@ -61,6 +61,10 @@ func (wm *WebMaster) handleScreenWS(c *gin.Context) {
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
+	config.Owner = c.GetString("gateway_controller")
+	if config.Owner == "" {
+		config.Owner = "local-owner"
+	}
 	if utils.IsLocalRootMode() && config.DeviceType != "android" {
 		_ = conn.WriteJSON(gin.H{"status": "error", "message": "Only this Android phone is available"})
 		return
@@ -166,7 +170,7 @@ Loop:
 	capabilities := agent.Capabilities()
 	log.Printf("Driver Capabilities: %+v", capabilities)
 	media_meta := agent.GetMediaMeta()
-	conn.WriteJSON(map[string]interface{}{"status": "ok", "capabilities": capabilities, "media_meta": media_meta, "stage": "webrtc_metainfo"})
+	conn.WriteJSON(map[string]interface{}{"status": "ok", "capabilities": capabilities, "media_meta": media_meta, "stage": "webrtc_metainfo", "quality_token": sub.QualityToken})
 
 	// Keep consuming the signaling connection after SDP negotiation. Gorilla
 	// processes close, ping and pong control frames while reading, and the

@@ -20,6 +20,7 @@ jobs:
         working-directory: deploy/remote
       - run: go test -race ./...
         working-directory: deploy/remote/gateway
+      - run: go test -race ./devicetools ./webservice ./sdriver/scrcpy
       - run: python3 scripts/build_native.py
   docker-lifecycle:
     runs-on: ubuntu-24.04

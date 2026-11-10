@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"remoteconsole.local/connect/releaseinfo"
 	"strings"
 	"syscall"
@@ -81,7 +82,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Cannot read private ICE configuration")
 	}
-	webMaster := webservice.New(webservice.WebMasterConfig{EnableAndroidDiscover: true, Loopback: *loopback}, pub)
+	webMaster := webservice.New(webservice.WebMasterConfig{EnableAndroidDiscover: true, Loopback: *loopback, EnableDeviceTools: *localRoot, ToolStateDirectory: filepath.Join(enrollmentWork, "features"), Version: releaseinfo.Version}, pub)
 	webMaster.SetICEConfiguration(iceConfig)
 	webMaster.SetPIN(*pin)
 

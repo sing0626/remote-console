@@ -10,6 +10,8 @@ const (
 )
 
 type AgentConfig struct {
+	RelayRegion       string            `json:"relay_region,omitempty"`
+	Owner             string            `json:"-"`
 	DeviceType        string            `json:"device_type"`
 	DeviceID          string            `json:"device_id"`
 	DeviceIP          string            `json:"device_ip"`

@@ -1,13 +1,13 @@
 import SwiftUI
 
-private enum ConsoleColor {
+enum ConsoleColor {
     static let ink = Color(red: 0.91, green: 0.97, blue: 0.97)
     static let muted = Color(red: 0.56, green: 0.67, blue: 0.72)
     static let mint = Color(red: 0.60, green: 0.91, blue: 0.81)
     static let base = Color(red: 0.035, green: 0.09, blue: 0.122)
 }
 
-private struct ConsoleBackdrop: View {
+struct ConsoleBackdrop: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -62,7 +62,7 @@ private struct InteractiveCapsuleGlass: ViewModifier {
             .overlay(Capsule(style: .continuous).stroke(.white.opacity(0.12), lineWidth: 0.7))
     }
 }
-private extension View {
+extension View {
     func glassSurface(_ radius: CGFloat = 24) -> some View { modifier(GlassSurface(radius: radius)) }
     func interactiveCapsuleGlass() -> some View { modifier(InteractiveCapsuleGlass()) }
     func insetField() -> some View {
@@ -80,6 +80,7 @@ private struct PressFeedback: ButtonStyle {
 
 struct ConsoleRoot: View {
     @StateObject private var session = NativeSession()
+    @StateObject private var nativeTools = NativeToolsModel()
     @Environment(\.scenePhase) private var phase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var address = ""
@@ -88,7 +89,7 @@ struct ConsoleRoot: View {
     @State private var password = ""
     @State private var error = ""
     @State private var profile = StreamProfile()
-    private enum Panel { case tools, settings, keyboard, hosts }
+    private enum Panel { case tools, settings, keyboard, hosts, files, terminal, dashboard }
     private final class PanelSelection: ObservableObject {
         @Published var panel: Panel = .tools
     }
@@ -137,7 +138,7 @@ struct ConsoleRoot: View {
         profile.fps = store.object(forKey: "nativeFPS") as? Int ?? 60
         profile.size = store.object(forKey: "nativeSize") as? Int ?? 1920
         profile.bitrate = store.object(forKey: "nativeBitrate") as? Int ?? 8_000_000
-        profile.relay = store.bool(forKey: "nativeRelay")
+        profile.relay = store.bool(forKey: "nativeRelay"); profile.region = store.string(forKey:"nativeRegion") ?? "auto"; profile.adaptive = store.object(forKey:"nativeAdaptive") as? Bool ?? true; profile.autoReconnect = store.object(forKey:"nativeReconnect") as? Bool ?? true
         if ProcessInfo.processInfo.arguments.contains("--preview-session") {
             designPreview = true; session.active = true; session.deviceName = "Android 電話"; session.status = "介面預覽 · 未連接"; session.detail = "未有聲畫連線"
         }
@@ -150,6 +151,9 @@ struct ConsoleRoot: View {
             case .settings: profileSheet
             case .keyboard: keyboardSheet
             case .hosts: hostsSheet
+            case .files: NativeToolsView(page:.files,model:nativeTools,session:session){closePanel()}
+            case .terminal: NativeToolsView(page:.terminal,model:nativeTools,session:session){closePanel()}
+            case .dashboard: NativeToolsView(page:.dashboard,model:nativeTools,session:session){closePanel()}
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .modifier(StablePanelGeometry())
@@ -416,6 +420,11 @@ struct ConsoleRoot: View {
                 choices([2,4,8,16],selection: Binding(get: { profile.bitrate / 1_000_000 },set: { profile.bitrate = $0 * 1_000_000 })) { "\($0) M" }
             }.padding(20).glassSurface(25)
             VStack(alignment: .leading,spacing: 14) { Toggle(isOn: $profile.relay) { HStack(spacing: 12) { Image(systemName: "point.3.connected.trianglepath.dotted").foregroundColor(ConsoleColor.mint); VStack(alignment: .leading,spacing: 4) { Text("TURN 中繼模式").font(.system(size: 14,weight: .medium)); Text("直連不穩定時可以開啟").font(.system(size: 10)).foregroundColor(ConsoleColor.muted) } } }.tint(ConsoleColor.mint); Text("多人連線會沿用現有串流畫質。實際 FPS 視乎電話、畫面活動同網絡。").font(.system(size: 11)).foregroundColor(ConsoleColor.muted).lineSpacing(4) }.padding(20).glassSurface(25)
+            VStack(alignment:.leading,spacing:14){
+                Toggle("自適應位元率",isOn:$profile.adaptive).accessibilityIdentifier("settings.adaptive")
+                Toggle("網絡變更後自動重連",isOn:$profile.autoReconnect)
+                Picker("中繼地區",selection:$profile.region){Text("自動 · 故障時切換").tag("auto");ForEach(session.relayRegions,id:\.self){region in Text(region["name"] ?? "中繼").tag(region["id"] ?? "auto")}}
+            }.font(.system(size:13)).tint(ConsoleColor.mint).padding(20).glassSurface(25)
             primaryButton(session.active && !designPreview ? "套用並重新連接" : "儲存設定",icon: "checkmark") { persistProfile(); closePanel(after: session.active && !designPreview ? .reconnect : nil) }
         }.padding(24).padding(.top,12) } }.preferredColorScheme(.dark)
     }
@@ -423,7 +432,7 @@ struct ConsoleRoot: View {
     private func choices(_ values: [Int],selection: Binding<Int>,title: @escaping (Int) -> String) -> some View {
         HStack(spacing: 6) { ForEach(values,id: \.self) { value in Button { selection.wrappedValue = value } label: { Text(title(value)).font(.system(size: 12,weight: .semibold,design: .rounded)).frame(maxWidth: .infinity).frame(height: 43).foregroundColor(selection.wrappedValue == value ? ConsoleColor.base : ConsoleColor.muted).background(selection.wrappedValue == value ? ConsoleColor.mint : .white.opacity(0.04),in: RoundedRectangle(cornerRadius: 12)) } } }
     }
-    private func persistProfile() { let store = UserDefaults.standard; store.set(profile.fps,forKey: "nativeFPS"); store.set(profile.size,forKey: "nativeSize"); store.set(profile.bitrate,forKey: "nativeBitrate"); store.set(profile.relay,forKey: "nativeRelay") }
+    private func persistProfile() { let store = UserDefaults.standard; store.set(profile.fps,forKey: "nativeFPS"); store.set(profile.size,forKey: "nativeSize"); store.set(profile.bitrate,forKey: "nativeBitrate"); store.set(profile.relay,forKey: "nativeRelay"); store.set(profile.region,forKey:"nativeRegion"); store.set(profile.adaptive,forKey:"nativeAdaptive"); store.set(profile.autoReconnect,forKey:"nativeReconnect") }
     private var keyboardSheet: some View {
         ZStack { ConsoleBackdrop(); VStack(alignment: .leading,spacing: 22) { sheetTitle("傳送文字",subtitle: "中文、Emoji，一樣貼到電話") { closePanel() }; TextEditor(text: $text).focused($composerFocused).accessibilityIdentifier("composer.input").padding(12).frame(minHeight: 140).glassSurface(20); HStack { Button { session.key(66) } label: { Label("Enter",systemImage: "return").font(.system(size: 13)) }; Spacer(); Button { closePanel(after: .paste(text)) } label: { Label("貼到電話",systemImage: "arrow.up.right").font(.system(size: 14,weight: .semibold)).padding(.horizontal,18).padding(.vertical,14).foregroundColor(ConsoleColor.base).background(ConsoleColor.mint,in: Capsule()) } } }.padding(24) }.preferredColorScheme(.dark)
     }
@@ -441,6 +450,7 @@ struct ConsoleRoot: View {
                 tool("清晰畫面","sparkles") { closePanel(after: .frame) }
                 tool("重新連接","arrow.clockwise") { closePanel(after: .reconnect) }
             }
+            HStack(spacing:10){tool("電話檔案","folder"){openPanel(.files)}.accessibilityIdentifier("tools.files");tool("Root 終端","terminal"){openPanel(.terminal)}.accessibilityIdentifier("tools.terminal");tool("電話與中繼","chart.bar"){openPanel(.dashboard)}.accessibilityIdentifier("tools.dashboard")}
             Button("結束連線",role: .destructive) { closePanel(after: .disconnect) }.font(.system(size: 13,weight: .medium)).frame(maxWidth: .infinity).frame(height: 48).background(.white.opacity(0.04),in: RoundedRectangle(cornerRadius: 15)).foregroundColor(Color(red: 0.95,green: 0.65,blue: 0.61)).accessibilityIdentifier("tools.disconnect")
         }.padding(24).padding(.top,12) } }.preferredColorScheme(.dark)
     }

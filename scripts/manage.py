@@ -22,7 +22,7 @@ import urllib.error
 REPO = 'sing0626/remote-console'
 PROJECT = 'remote-console-generic'
 MARKER = '.remote-console-managed'
-SUITE_VERSION = '0.4.2'
+SUITE_VERSION = '0.5.0'
 
 
 class Paths:
@@ -532,6 +532,12 @@ class Manager:
                 remove_owned(recovery)
             raise RuntimeError('新版啟動失敗，已恢復舊版程式；電話與控制端憑證保持原有資料')
         write_json(self.p.config, dict(cfg, **version, previous_release=cfg['release'], previous_commit=cfg['commit']))
+        relay_script = self.p.source/'scripts/relay.py'
+        if relay_script.exists() and (self.p.data/'relay-link-state.json').exists():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('halfcloud_relay_upgrade',relay_script)
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            module.upgrade_gateway_relays(self)
         print('已更新至 '+version['release']+'；電話配對與控制端授權已保留。')
 
     def rollback(self):

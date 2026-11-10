@@ -10,17 +10,23 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/pion/webrtc/v4"
+	"webscreen/devicetools"
 	sagent "webscreen/streamAgent"
 	"webscreen/utils"
 	"webscreen/webservice/android"
 )
 
 type WebMasterConfig struct {
+	EnableDeviceTools     bool
+	SharedDirectory       string
+	ToolStateDirectory    string
+	Version               string
 	Loopback              bool
 	EnableAndroidDiscover bool
 }
 
 type WebMaster struct {
+	tools           *devicetools.Manager
 	gatewayMu       sync.RWMutex
 	gatewayIdentity *gatewayIdentity
 	// WSConns []*websocket.Conn
@@ -55,6 +61,7 @@ func New(config WebMasterConfig, staticFS fs.FS) *WebMaster {
 	}
 	wm.jwtSecret = make([]byte, 32)
 	wm.WebRTCManager.onLastSubscriber = wm.restoreLocalBacklight
+	wm.createTools()
 	if _, err := rand.Read(wm.jwtSecret); err != nil {
 		panic("cannot initialize authentication key")
 	}
@@ -102,6 +109,7 @@ func (wm *WebMaster) setRouter() {
 		ctx.Redirect(302, "/control")
 	})
 	r.Use(wm.HybridAuthMiddleware())
+	r.Any("/api/tools/*path", wm.deviceTools)
 	r.GET("/control", func(c *gin.Context) { c.FileFromFS("control.html", http.FS(wm.staticFS)) })
 	screen := r.Group("/screen")
 	{
@@ -142,7 +150,11 @@ func (wm *WebMaster) setRouter() {
 		api.POST("/gateway-trust/approve", wm.handleGatewayTrustApprove)
 		api.POST("/gateway-trust/revoke", wm.handleGatewayTrustRevoke)
 		api.GET("/ice-config", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"iceServers": wm.WebRTCManager.iceServers()})
+			if !wm.WebRTCManager.hasRelayRegion(c.Query("region")) {
+				c.JSON(400, gin.H{"error": "unknown_relay_region"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"iceServers": wm.WebRTCManager.iceServersForRegion(c.Query("region")), "relay_regions": wm.WebRTCManager.relayRegions()})
 		})
 		api.GET("/screen/sessions", func(c *gin.Context) {
 			count := wm.WebRTCManager.connectedCount()
@@ -188,6 +200,9 @@ func (wm *WebMaster) Serve(host, port string) {
 }
 
 func (wm *WebMaster) Close() {
+	if wm.tools != nil {
+		wm.tools.Close()
+	}
 	wm.WebRTCManager.RLock()
 	var agents []*sagent.Agent
 	var peers []*webrtc.PeerConnection
