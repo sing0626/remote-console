@@ -15,7 +15,7 @@ final class ConsoleStyle {
     private final Typeface regular,bold;
     ConsoleStyle(Context context){this.context=context;regular=Typeface.createFromAsset(context.getAssets(),"fonts/NotoSansTC.ttf");bold=Typeface.create(regular,Typeface.BOLD);}
     int dp(float value){return Math.round(value*context.getResources().getDisplayMetrics().density);}
-    LinearLayout column(){LinearLayout l=new LinearLayout(context);l.setOrientation(1);return l;}
+    LinearLayout column(){LinearLayout l=new LinearLayout(context);l.setOrientation(LinearLayout.VERTICAL);return l;}
     LinearLayout row(){LinearLayout l=new LinearLayout(context);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
     TextView text(String label,int size,int color,boolean emphasized){TextView t=new TextView(context);t.setText(label);t.setTextSize(size);t.setTextColor(color);t.setTypeface(emphasized?bold:regular);t.setFontVariationSettings("'wght' "+(emphasized?600:400));t.setIncludeFontPadding(false);return t;}
     TextView text(String label,int size){return text(label,size,INK,false);}
@@ -32,7 +32,7 @@ final class ConsoleStyle {
     EditText input(String hint,boolean secret){EditText v=new EditText(context);v.setTextSize(14);v.setTextColor(INK);v.setHintTextColor(0xff6d8794);v.setHint(hint);v.setSingleLine(true);v.setPadding(dp(14),dp(10),dp(14),dp(10));v.setBackground(inset());v.setInputType(secret?0x12:android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);v.setTypeface(regular);v.setFontVariationSettings("'wght' 400");v.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(52)));return v;}
     LinearLayout label(String label,String glyph){LinearLayout l=row();l.addView(icon(glyph,12,MUTED));TextView t=text(label,10,MUTED,false);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,-2);p.leftMargin=dp(6);l.addView(t,p);return l;}
     void field(LinearLayout parent,String label,String glyph,EditText input){parent.addView(label(label,glyph));gap(parent,8);parent.addView(input);}
-    LinearLayout action(String label,String glyph,boolean selected){ActionCell l=new ActionCell(context);l.setOrientation(1);l.setGravity(Gravity.CENTER);l.setBackground(ripple(fill(selected?0x1689e1c5:Color.TRANSPARENT,18)));l.addView(icon(glyph,23,selected?MINT:0xffcadbdc));TextView title=text(label,9,selected?MINT:MUTED,false);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,-2);p.topMargin=dp(6);l.addView(title,p);l.setContentDescription(label);l.setClickable(true);l.setFocusable(true);return l;}
+    LinearLayout action(String label,String glyph,boolean selected){ActionCell l=new ActionCell(context);l.setOrientation(LinearLayout.VERTICAL);l.setGravity(Gravity.CENTER);l.setBackground(ripple(fill(selected?0x1689e1c5:Color.TRANSPARENT,18)));l.addView(icon(glyph,23,selected?MINT:0xffcadbdc));TextView title=text(label,9,selected?MINT:MUTED,false);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,-2);p.topMargin=dp(6);l.addView(title,p);l.setContentDescription(label);l.setClickable(true);l.setFocusable(true);return l;}
     static final class ActionCell extends LinearLayout {
         ActionCell(Context c){super(c);}
         @Override public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(info);info.setClassName(Button.class.getName());}
