@@ -169,7 +169,7 @@ def identity_snapshot(data):
         if not path.is_file(): continue
         relative = path.relative_to(data).as_posix()
         if '.generated.' in path.name or relative in [MARKER, 'enrollment.pub']: continue
-        if relative.startswith('controller-trust/.trust-'): continue
+        if relative.startswith(('controller-trust/.trust-', 'controller-trust/.relay-report-')) or relative == 'controller-trust/relay-reports.json': continue
         content = path.read_bytes()
         if relative == 'controller-trust/controllers.json':
             trust = json.loads(content)

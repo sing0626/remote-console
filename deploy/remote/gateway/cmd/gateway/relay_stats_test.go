@@ -20,7 +20,10 @@ func TestRelayReportsAuthenticationPersistenceAndWarnings(t *testing.T) {
 	key := sha256.Sum256([]byte("synthetic-report-key"))
 	cfg, _ := json.Marshal([]relayNode{{ID: "hk", Name: "Hong Kong", Key: hex.EncodeToString(key[:])}})
 	os.WriteFile(filepath.Join(dir, "relay-nodes.json"), cfg, 0600)
-	m, e := loadRelayMonitor(dir)
+	stateDir := t.TempDir()
+	os.Chmod(dir, 0555)
+	t.Cleanup(func() { os.Chmod(dir, 0700) })
+	m, e := loadRelayMonitor(dir, stateDir)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -47,7 +50,7 @@ func TestRelayReportsAuthenticationPersistenceAndWarnings(t *testing.T) {
 	if w := send(sig); w.Code != 409 {
 		t.Fatal("replay", w.Code)
 	}
-	m, e = loadRelayMonitor(dir)
+	m, e = loadRelayMonitor(dir, stateDir)
 	if e != nil {
 		t.Fatal(e)
 	}

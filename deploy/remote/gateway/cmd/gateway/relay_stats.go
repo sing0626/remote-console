@@ -41,8 +41,12 @@ type relayMonitor struct {
 	path    string
 }
 
-func loadRelayMonitor(dir string) (*relayMonitor, error) {
-	m := &relayMonitor{nodes: map[string]relayNode{}, reports: map[string]relayReport{}, path: filepath.Join(dir, "relay-reports.json")}
+func loadRelayMonitor(dir string, stateDir ...string) (*relayMonitor, error) {
+	storage := dir
+	if len(stateDir) > 0 && stateDir[0] != "" {
+		storage = stateDir[0]
+	}
+	m := &relayMonitor{nodes: map[string]relayNode{}, reports: map[string]relayReport{}, path: filepath.Join(storage, "relay-reports.json")}
 	b, e := os.ReadFile(filepath.Join(dir, "relay-nodes.json"))
 	if os.IsNotExist(e) {
 		return m, nil

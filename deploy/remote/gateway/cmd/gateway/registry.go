@@ -96,7 +96,11 @@ func handlerFromRegistry(path string, trustFile ...string) (http.Handler, error)
 			return nil, err
 		}
 	}
-	handler.relays, err = loadRelayMonitor(filepath.Dir(path))
+	stateDir := filepath.Dir(path)
+	if len(trustFile) > 0 && trustFile[0] != "" {
+		stateDir = filepath.Dir(trustFile[0])
+	}
+	handler.relays, err = loadRelayMonitor(filepath.Dir(path), stateDir)
 	if err != nil {
 		return nil, err
 	}
