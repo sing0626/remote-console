@@ -115,13 +115,26 @@ with tempfile.TemporaryDirectory(prefix='remote-console-legacy-docker-') as temp
         # The real gateway must keep accepting the original trusted credential
         # while new encrypted enrollment bundles advertise a separate relay.
         before_relay = manage.identity_snapshot(data)
-        relay.connect_gateway(manager, dict(schema=1, kind='halfcloud-relay', public_ip='93.184.216.35',
-                              port=3478, secret='synthetic-relay-'+'x'*48), check=lambda profile: None)
+        relay_profile=dict(schema=1, kind='halfcloud-relay', public_ip='93.184.216.35',port=3478,secret='synthetic-relay-'+'x'*48)
+        relay.connect_gateway(manager,relay_profile,check=lambda profile:None)
         authenticated()
         current = manage.identity_snapshot(data)
         for relative, digest in before_relay.items():
             if not relative.endswith('ice.private.json'):
                 assert current[relative] == digest, relative
+        # /private is read-only inside the actual container; reports must persist on /state.
+        import hmac,time,urllib.error
+        report=dict(id=relay.relay_id(relay_profile),at=int(time.time()),day=dict(rx=100,tx=200),month=dict(rx=1000,tx=960000000),total=dict(rx=1000,tx=960000000),quota_gb=1,count='tx',active=True)
+        body=json.dumps(report,separators=(',',':')).encode();stamp=str(report['at'])
+        signature=hmac.new(relay.report_key(relay_profile),(stamp+'\n'+hashlib.sha256(body).hexdigest()).encode(),hashlib.sha256).hexdigest()
+        request=urllib.request.Request('http://127.0.0.1:18079/_remoteconsole/relays/report',body,headers={'Content-Type':'application/json','X-HalfCloud-Time':stamp,'X-HalfCloud-Signature':signature})
+        with urllib.request.urlopen(request,timeout=10) as response:assert response.status==204
+        assert (data/'controller-trust/relay-reports.json').is_file()
+        def relay_status():
+            req=urllib.request.Request('http://127.0.0.1:18079/_remoteconsole/relays/status',headers={'X-RemoteConsole-Controller':ident+'.'+secret})
+            with urllib.request.urlopen(req,timeout=10) as response:status=json.load(response)
+            assert status['relays'][0]['available'] and '95%' in status['relays'][0]['warning'],status
+        relay_status();manager.compose('up','-d','--force-recreate','gateway');assert manager.healthy();relay_status()
         relay.connect_gateway(manager, restore=True)
         authenticated()
         assert manage.identity_snapshot(data) == before_relay
