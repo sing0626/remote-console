@@ -220,9 +220,22 @@ func (m *Manager) beginUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if len(manifests) > 512 {
-		problem(w, 429, "too_many_uploads")
-		return
+	if len(manifests) >= 512 {
+		// Completed manifests are a retry cache; discard metadata only, retaining the uploaded files.
+		remaining := len(manifests)
+		for _, path := range manifests {
+			data, e := os.ReadFile(path)
+			var saved Upload
+			if e == nil && json.Unmarshal(data, &saved) == nil && saved.Complete {
+				if os.Remove(path) == nil {
+					remaining--
+				}
+			}
+		}
+		if remaining >= 512 {
+			problem(w, 429, "too_many_uploads")
+			return
+		}
 	}
 	if !body.Overwrite {
 		if _, e := m.root.Lstat(path); e == nil {

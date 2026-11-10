@@ -1,0 +1,42 @@
+name: Verify native Android tools and reconnect
+on: [workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  native-controller:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build native controller and start synthetic WebRTC fixture
+        run: |
+          gradle :controller:assembleDebug --no-daemon --console=plain
+          python3 -m pip install -r clients/ios/fixture-requirements.txt
+          mkdir -p ui-evidence
+          nohup python3 -u clients/ios/webrtc_fixture.py > ui-evidence/fixture.log 2>&1 &
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          disable-linux-hw-accel: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-snapshot -no-boot-anim -camera-back none
+          script: python3 scripts/test_android_ui.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-native-evidence
+          path: ui-evidence/

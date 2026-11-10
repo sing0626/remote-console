@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"net/url"
@@ -168,4 +169,25 @@ func TestPartialChunkSaved(t *testing.T) {
 	}
 	object(t, call(m, "a", "PUT", "/api/tools/uploads/"+id+"?offset=2", "345"), 200)
 	object(t, call(m, "a", "POST", "/api/tools/uploads/"+id+"/finish", ""), 200)
+}
+
+func TestUnicodeJobOutputAcrossPollBoundaries(t *testing.T) {
+	m, _ := setup(t)
+	text := strings.Repeat("中😀", 18000)
+	j := &Job{ID: "unicode", Owner: "a", Done: true, Code: 0}
+	j.Write([]byte(text))
+	m.jobs[j.ID] = j
+	output := ""
+	offset := int64(0)
+	for i := 0; i < 10; i++ {
+		v := object(t, call(m, "a", "GET", "/api/tools/terminal/jobs/unicode?offset="+fmt.Sprint(offset), ""), 200)
+		output += v["output"].(string)
+		offset = int64(v["offset"].(float64))
+		if v["done"] == true {
+			break
+		}
+	}
+	if output != text {
+		t.Fatal("UTF-8 output was damaged at page boundary")
+	}
 }

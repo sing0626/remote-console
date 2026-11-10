@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const outputLimit = 1 << 20
@@ -167,6 +168,12 @@ func (m *Manager) jobStatus(w http.ResponseWriter, r *http.Request) {
 	if start > end {
 		problem(w, 400, "invalid_offset")
 		return
+	}
+	// Keep polling offsets on UTF-8 boundaries so split Chinese/emoji output survives pagination.
+	if end < job.Base+int64(len(job.Output)) {
+		for end > start && !utf8.RuneStart(job.Output[end-job.Base]) {
+			end--
+		}
 	}
 	respond(w, 200, map[string]any{"id": job.ID, "kind": job.Kind, "output": strings.ToValidUTF8(string(job.Output[start-job.Base:end-job.Base]), "�"), "offset": end, "truncated": offset < job.Base, "done": job.Done && end == job.Base+int64(len(job.Output)), "exit_code": job.Code})
 }
