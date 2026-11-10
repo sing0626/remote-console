@@ -38,7 +38,7 @@ public final class NativeSession {
     private final ExecutorService toolsQueue=Executors.newFixedThreadPool(2);
     private final NetworkPolicy networkPolicy=new NetworkPolicy();
     private volatile int generation;
-    private int retryCount,ceilingBitrate,currentBitrate;
+    private int retryCount,regionIndex,ceilingBitrate,currentBitrate;
     private String pinForResume="",selectedRegion="auto",activeRegion="",qualityToken="";
     private boolean autoReconnect=true,adaptive=true,paired;
     private int resumeFps,resumeSize,resumeBitrate;
@@ -154,7 +154,7 @@ public final class NativeSession {
                 JSONObject config=request("/api/ice-config",null);regions=config.optJSONArray("relay_regions");if(regions==null)regions=new JSONArray();
                 activeRegion="";
                 if(regions.length()>0){
-                    if("auto".equals(selectedRegion))activeRegion=regions.getJSONObject(retryCount%regions.length()).getString("id");
+                    if("auto".equals(selectedRegion))activeRegion=regions.getJSONObject(regionIndex%regions.length()).getString("id");
                     else for(int n=0;n<regions.length();n++)if(selectedRegion.equals(regions.getJSONObject(n).optString("id")))activeRegion=selectedRegion;
                     if(!activeRegion.isEmpty())config=request("/api/ice-config?region="+activeRegion,null);
                 }
@@ -261,7 +261,7 @@ public final class NativeSession {
     private void fail(String reason){fail(reason,true);}
     private void fail(String reason,boolean retry){
         if(stopped||closed||cancelling)return;stopNow();
-        if(retry&&autoReconnect){retryCount++;long delay=NetworkPolicy.retryDelay(retryCount);ui(()->listener.state("網絡中斷 · "+(delay/1000)+" 秒後重連",false));
+        if(retry&&autoReconnect){retryCount++;regionIndex++;long delay=NetworkPolicy.retryDelay(retryCount);ui(()->listener.state("網絡中斷 · "+(delay/1000)+" 秒後重連",false));
             retryTask=()->{if(closed||cancelling)return;try{queue.execute(()->{if(closed||cancelling)return;stopped=false;connect(pinForResume,resumeFps,resumeSize,resumeBitrate,resumeRelay,muted);});}catch(RejectedExecutionException ignored){}};main.postDelayed(retryTask,delay);
         }else ui(()->listener.state(reason,false));
     }

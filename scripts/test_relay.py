@@ -114,4 +114,25 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual((self.data/'ice.private.json').read_bytes(),later)
 
 
+class ReportingTests(unittest.TestCase):
+    def test_report_payload_signature_and_no_turn_secret(self):
+        import unittest.mock as mock
+        import hashlib,hmac,types
+        value=dict(PROFILE,interface='eth0',gateway_origin='https://control.example.com',quota_gb=1000,count='tx')
+        hk=__import__('datetime').timezone(__import__('datetime').timedelta(hours=8))
+        now=__import__('datetime').datetime.now(hk)
+        traffic={'interfaces':[{'name':'eth0','traffic':{'total':{'rx':1234,'tx':5678},'day':[{'date':{'year':now.year,'month':now.month,'day':now.day},'rx':123,'tx':456}],'month':[{'date':{'year':now.year,'month':now.month},'rx':1234,'tx':5678}]}}]}
+        response=mock.MagicMock();response.__enter__.return_value.status=204
+        opener=mock.MagicMock();opener.open.return_value=response
+        with mock.patch('zoneinfo.ZoneInfo',return_value=hk),mock.patch.object(relay,'config',return_value=value),mock.patch.object(relay,'vnstat',return_value=types.SimpleNamespace(stdout=json.dumps(traffic))),mock.patch.object(relay,'run',return_value=types.SimpleNamespace(returncode=0)),mock.patch.object(relay.urllib.request,'build_opener',return_value=opener):
+            relay.send_report()
+        request=opener.open.call_args.args[0];body=request.data
+        self.assertNotIn(PROFILE['secret'].encode(),body)
+        report=json.loads(body);self.assertEqual(report['day']['tx'],456)
+        expected=hmac.new(relay.report_key(value),(str(report['at'])+'\n'+hashlib.sha256(body).hexdigest()).encode(),hashlib.sha256).hexdigest()
+        self.assertEqual(request.get_header('X-halfcloud-signature'),expected)
+        for origin in ['http://control.example.com','https://user:pass@control.example.com','https://control.example.com/path','https://control.example.com?x=1']:
+            with self.assertRaises(ValueError):relay.report_origin(origin)
+
+
 if __name__=='__main__':unittest.main()

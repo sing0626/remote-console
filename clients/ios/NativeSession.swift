@@ -24,7 +24,7 @@ final class NativeSession: NSObject, ObservableObject {
     @Published var videoHeight = 2400
     @Published var relayRegions: [[String: String]] = []
     private var networkPolicy = AdaptiveNetworkPolicy()
-    private var retryCount = 0, currentBitrate = 8_000_000
+    private var retryCount = 0, regionIndex = 0, currentBitrate = 8_000_000
     private var regionMetadata: [[String:Any]] = []
     private var activeRegion = "", qualityToken = ""
     private var retryWork: DispatchWorkItem?
@@ -109,7 +109,7 @@ final class NativeSession: NSObject, ObservableObject {
         return value
     }
     func connect(endpoint: URL, pin: String, profile: StreamProfile, username: String = "", password: String = "", deviceID: String? = nil, hostName: String? = nil) {
-        retryCount = 0
+        retryCount = 0; regionIndex = 0
         begin(endpoint: endpoint,pin: pin,profile: profile,username: username,password: password,deviceID: deviceID,hostName: hostName)
     }
     private func begin(endpoint: URL, pin: String, profile: StreamProfile, username: String, password: String, deviceID: String?, hostName: String?) {
@@ -148,7 +148,7 @@ final class NativeSession: NSObject, ObservableObject {
                 relayRegions = available.compactMap { item in guard let id=item["id"] as? String,let name=item["name"] as? String else {return nil};return ["id":id,"name":name] }
                 activeRegion = ""
                 if !relayRegions.isEmpty {
-                    if profile.region == "auto" { activeRegion = relayRegions[retryCount % relayRegions.count]["id"] ?? "" }
+                    if profile.region == "auto" { activeRegion = relayRegions[regionIndex % relayRegions.count]["id"] ?? "" }
                     else if relayRegions.contains(where: {$0["id"] == profile.region}) { activeRegion = profile.region }
                     if !activeRegion.isEmpty { ice = try await request("/api/ice-config?region="+activeRegion) }
                 }
@@ -236,12 +236,12 @@ final class NativeSession: NSObject, ObservableObject {
     }
     private func retryable(_ error: Error) -> Bool {
         if case Failure.http(let code) = error { return code >= 500 }
-        let e=error as NSError; return e.domain == NSURLErrorDomain && e.code != NSURLErrorCancelled && e.code != NSURLErrorUserAuthenticationRequired
+        let e=error as NSError; return e.domain == NSPOSIXErrorDomain || (e.domain == NSURLErrorDomain && e.code != NSURLErrorCancelled && e.code != NSURLErrorUserAuthenticationRequired)
     }
     private func fail(_ value: String, retry: Bool = true) {
         guard active else {return};stop(); ready=false
         guard retry,let r=resume,r.2.autoReconnect else {status=value;notice=value;return}
-        retryCount += 1;let delay=AdaptiveNetworkPolicy.retryDelay(retryCount)
+        retryCount += 1;regionIndex += 1;let delay=AdaptiveNetworkPolicy.retryDelay(retryCount)
         status="網絡中斷 · \(Int(delay)) 秒後重連"
         let work=DispatchWorkItem { [weak self] in guard let self=self,self.active else{return};self.begin(endpoint:r.0,pin:r.1,profile:r.2,username:r.3,password:r.4,deviceID:r.5,hostName:r.6) }
         retryWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+delay,execute:work)

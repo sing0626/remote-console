@@ -34,7 +34,7 @@ peers = set()
 trust_states = {18741: {"requests": {}, "credentials": {}}, 18742: {"requests": {}, "credentials": {}}}
 credential_sockets = {}
 
-metrics = {"offers": 0, "connected": 0, "controlPackets": 0, "outboundAudioBytes": 0, "outboundVideoBytes": 0, "connectionsByDevice": {}, "approvalRequests": 0, "credentialSessions": 0, "terminalJobs":0,"toolReads":0}
+metrics = {"offers": 0, "connected": 0, "controlPackets": 0, "outboundAudioBytes": 0, "outboundVideoBytes": 0, "connectionsByDevice": {}, "approvalRequests": 0, "credentialSessions": 0, "terminalJobs":0,"toolReads":0,"networkDrops":0}
 
 
 def selected(request):
@@ -87,6 +87,9 @@ async def api(request):
                 await ws.close(code=1008, message=b"controller_revoked")
         return web.json_response({"revoked": True})
     if request.path == "/fixture/drop" and request.method == "POST":
+        metrics["networkDrops"]+=1
+        metrics["approvalRequestsAtDrop"]=metrics["approvalRequests"]
+        metrics["credentialSessionsAtDrop"]=metrics["credentialSessions"]
         for sockets in list(credential_sockets.values()):
             for ws in list(sockets): await ws.close(code=1001,message=b"network fixture")
         return web.json_response({"dropped":True})

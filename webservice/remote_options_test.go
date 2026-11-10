@@ -56,3 +56,37 @@ func TestMarbleForwardedSecureCookieOnlyFromLoopback(t *testing.T) {
 		t.Fatal("HTTPS tunnel cookie missing Secure")
 	}
 }
+
+func TestRelayRegionsUseIndependentTemporaryCredentials(t *testing.T) {
+	a, b := strings.Repeat("a", 48), strings.Repeat("b", 48)
+	c := &ICEConfiguration{Regions: []RelayRegion{{ID: "hk", Name: "Hong Kong", TURN: []string{"turn:hk.example:3478"}, Secret: a}, {ID: "jp", Name: "Japan", TURN: []string{"turn:jp.example:3478"}, Secret: b}}}
+	raw, _ := json.Marshal(c)
+	parsed, e := ParseICEConfiguration(raw)
+	if e != nil {
+		t.Fatal(e)
+	}
+	now := time.Unix(1800000000, 0)
+	hk := parsed.ServersForRegion(now, "hk")
+	jp := parsed.ServersForRegion(now, "jp")
+	if len(hk) != 1 || len(jp) != 1 || hk[0].Credential == jp[0].Credential || hk[0].URLs[0] == jp[0].URLs[0] {
+		t.Fatal(hk, jp)
+	}
+	all := parsed.Servers(now)
+	if len(all) != 2 {
+		t.Fatal(all)
+	}
+	wm := &WebMaster{WebRTCManager: &WebRTCManager{}}
+	wm.SetICEConfiguration(parsed)
+	data, _ := json.Marshal(wm.WebRTCManager.relayRegions())
+	if strings.Contains(string(data), a) || strings.Contains(string(data), b) {
+		t.Fatal("shared secret exposed")
+	}
+	if wm.WebRTCManager.hasRelayRegion("unknown") {
+		t.Fatal("unknown region accepted")
+	}
+	parsed.Regions = append(parsed.Regions, parsed.Regions[0])
+	raw, _ = json.Marshal(parsed)
+	if _, e = ParseICEConfiguration(raw); e == nil {
+		t.Fatal("duplicate region")
+	}
+}

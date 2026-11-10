@@ -498,11 +498,18 @@ class Manager:
         print('首次控制端請喺電話批准一次，之後免 PIN；電話可撤銷。')
         print('管理選單：remote-console')
 
+    def upgrade_network(self):
+        relay_script = self.p.source/'scripts/relay.py'
+        if relay_script.exists() and (self.p.data/'relay-link-state.json').exists():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('halfcloud_relay_upgrade',relay_script)
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            module.upgrade_gateway_relays(self)
     def update(self, release=None):
         cfg = self.config()
         stage, version = self.stage(release)
         if cfg['commit'] == version['commit']:
-            remove_owned(stage); print('已經係 '+version['release']); return
+            remove_owned(stage); self.upgrade_network(); print('已經係 '+version['release']); return
         try:
             self.backup()
             self.compose('config', '--quiet', source=stage)
@@ -532,12 +539,7 @@ class Manager:
                 remove_owned(recovery)
             raise RuntimeError('新版啟動失敗，已恢復舊版程式；電話與控制端憑證保持原有資料')
         write_json(self.p.config, dict(cfg, **version, previous_release=cfg['release'], previous_commit=cfg['commit']))
-        relay_script = self.p.source/'scripts/relay.py'
-        if relay_script.exists() and (self.p.data/'relay-link-state.json').exists():
-            import importlib.util
-            spec = importlib.util.spec_from_file_location('halfcloud_relay_upgrade',relay_script)
-            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-            module.upgrade_gateway_relays(self)
+        self.upgrade_network()
         print('已更新至 '+version['release']+'；電話配對與控制端授權已保留。')
 
     def rollback(self):

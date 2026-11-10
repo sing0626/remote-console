@@ -95,6 +95,8 @@ jobs:
           assert d['connected'] >= 7 and d['controlPackets'] >= 4 and d['outboundAudioBytes'] > 0 and d['outboundVideoBytes'] > 0,d
           assert d['connectionsByDevice'].get('fixture-a',0) >= 1 and d['connectionsByDevice'].get('fixture-b',0) >= 1,d
           assert d['approvalRequests'] >= 3 and d['credentialSessions'] >= 3,d
+          assert d['toolReads'] >= 1 and d['terminalJobs'] >= 1 and d['networkDrops'] >= 1,d
+          assert d['approvalRequests'] == d['approvalRequestsAtDrop'] and d['credentialSessions'] > d['credentialSessionsAtDrop'],d
           PY
             if [ "$?" != 0 ]; then TEST_EXIT=1; fi
           fi

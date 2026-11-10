@@ -462,7 +462,7 @@ def connect_gateway(manager, profile=None, restore=False, check=probe):
             regions.append(dict(id='jp', name='日本', **{k:original[k] for k in ['stun_urls','turn_urls','turn_shared_secret'] if k in original}))
         updated = (json.dumps(dict(primary, relay_regions=regions), indent=2)+'\n').encode()
         digest = hashlib.sha256(updated).hexdigest()
-        if state and state.get('applied_sha256') == digest and all(p.read_bytes() == updated for p in paths):
+        if state and state.get('applied_sha256') == digest and all(p.read_bytes() == updated for p in paths) and (data/'relay-nodes.json').is_file() and json.loads((data/'relay-nodes.json').read_bytes()) == [dict(id=relay_id(profile),name='香港',key=report_key(profile).hex())]:
             print('已接駁至同一香港中繼。'); return
         targets = {path: updated for path in paths}
     node_path = data/'relay-nodes.json'
@@ -567,7 +567,8 @@ OnUnitActiveSec=60sec
 WantedBy=timers.target
 """,0o644)
     run('systemctl','daemon-reload');run('systemctl','enable','--now','halfcloud-relay-report.timer')
-    send_report()
+    run('systemctl','start','halfcloud-relay-report.service')
+    print('已啟用每分鐘流量回報。')
 
 
 def send_report():
@@ -665,7 +666,7 @@ def relay_lock():
 
 
 def execute(args):
-    with relay_lock() if args.command in ['install', 'quota', 'uninstall', 'start', 'stop', 'restart'] else contextlib.nullcontext():
+    with relay_lock() if args.command in ['install', 'quota', 'uninstall', 'start', 'stop', 'restart', 'report-to'] else contextlib.nullcontext():
         return _execute(args)
 
 

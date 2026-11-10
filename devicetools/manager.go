@@ -163,7 +163,7 @@ func (m *Manager) quality(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
-	if body.Bitrate < 500000 || body.Bitrate > 32000000 || len(body.Token) > 100 {
+	if body.Bitrate < 500000 || body.Bitrate > 30000000 || len(body.Token) > 100 {
 		problem(w, 400, "invalid_bitrate")
 		return
 	}

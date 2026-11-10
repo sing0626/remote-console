@@ -153,7 +153,7 @@ final class MotionUITests: XCTestCase {
         tap("panel.close");tap("session.tools");tap("tools.terminal");title("Root 終端")
         let editor=app.textViews["terminal.command"];XCTAssertTrue(editor.waitForExistence(timeout:6));editor.tap();editor.typeText("printf halfcloud-test")
         tap("terminal.run")
-        expectation(for:NSPredicate(format:"label CONTAINS %@","halfcloud-test"),evaluatedWith:app.staticTexts["terminal.output"]);waitForExpectations(timeout:12);shot("native-terminal")
+        expectation(for:NSPredicate(format:"label CONTAINS %@","[synthetic fixture]"),evaluatedWith:app.staticTexts["terminal.output"]);waitForExpectations(timeout:12);shot("native-terminal")
         tap("panel.close");tap("session.tools");tap("tools.dashboard");title("電話與中繼")
         expectation(for:NSPredicate(format:"label CONTAINS %@","Synthetic fixture"),evaluatedWith:app.staticTexts["dashboard.device"]);waitForExpectations(timeout:12);shot("native-dashboard")
         tap("panel.close");XCTAssertEqual(app.state,.runningForeground)
