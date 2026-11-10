@@ -163,17 +163,37 @@ struct NativeToolsView: View {
     @ObservedObject var model:NativeToolsModel
     @ObservedObject var session:NativeSession
     let close:()->Void
+    @FocusState private var commandFocused: Bool
     @State private var importer=false
     @State private var folderName=""
     @State private var deletion:PhoneFile?
     @State private var installation:PhoneFile?
     private var title:String {page == .files ? "電話檔案":page == .terminal ? "Root 終端":"電話與中繼"}
+    private var header: some View {
+        HStack {
+            VStack(alignment:.leading,spacing:6) {
+                Text(title).font(.system(size:25,weight:.semibold))
+                Text(page == .files ? "共用儲存空間 · 支援斷點續傳":page == .terminal ? "指令喺受控電話執行":"每 15 秒更新 · 香港時間")
+                    .font(.system(size:11)).foregroundColor(ConsoleColor.muted)
+            }
+            Spacer()
+            Button {commandFocused=false;close()} label: {Image(systemName:"xmark").frame(width:44,height:44)}
+                .buttonStyle(.plain).interactiveCapsuleGlass().accessibilityIdentifier("panel.close")
+        }.padding(.horizontal,24).padding(.top,24).padding(.bottom,20)
+    }
     var body:some View {
-        ZStack {ConsoleBackdrop();ScrollView {VStack(alignment:.leading,spacing:18){
-            HStack {VStack(alignment:.leading,spacing:6){Text(title).font(.system(size:25,weight:.semibold));Text(page == .files ? "共用儲存空間 · 支援斷點續傳":page == .terminal ? "指令喺受控電話執行":"每 15 秒更新 · 香港時間").font(.system(size:11)).foregroundColor(ConsoleColor.muted)};Spacer();Button(action:close){Image(systemName:"xmark").frame(width:44,height:44)}.buttonStyle(.plain).interactiveCapsuleGlass().accessibilityIdentifier("panel.close")}
-            if !model.message.isEmpty {Text(model.message).font(.system(size:12)).foregroundColor(ConsoleColor.mint).textSelection(.enabled)}
-            if page == .files {fileBrowser} else if page == .terminal {terminal} else {dashboard}
-        }.padding(24).padding(.top,12)}}.foregroundColor(ConsoleColor.ink).preferredColorScheme(.dark)
+        ZStack {
+            ConsoleBackdrop()
+            VStack(spacing:0) {
+                header
+                ScrollView {
+                    VStack(alignment:.leading,spacing:18) {
+                        if !model.message.isEmpty {Text(model.message).font(.system(size:12)).foregroundColor(ConsoleColor.mint).textSelection(.enabled)}
+                        if page == .files {fileBrowser} else if page == .terminal {terminal} else {dashboard}
+                    }.padding(.horizontal,24).padding(.bottom,24)
+                }
+            }.frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.top)
+        }.foregroundColor(ConsoleColor.ink).preferredColorScheme(.dark)
         .fileImporter(isPresented:$importer,allowedContentTypes:[.item],allowsMultipleSelection:false){result in switch result{case .success(let urls):if let url=urls.first{model.upload(url,session)};case .failure(let error):model.message=error.localizedDescription}}
         .sheet(item:$model.exported){item in FileShare(url:item.url)}
         .alert("刪除檔案？",isPresented:Binding(get:{deletion != nil},set:{if !$0{deletion=nil}})){Button("刪除",role:.destructive){if let file=deletion{Task{await model.remove(file,session)}};deletion=nil};Button("取消",role:.cancel){deletion=nil}} message:{Text(deletion?.name ?? "")}
@@ -215,12 +235,18 @@ struct NativeToolsView: View {
         if !model.output.isEmpty && model.output != "$ " {Text(model.output).font(.system(size:11,design:.monospaced)).textSelection(.enabled).padding(14).glassSurface(16)}
     }}
     private var terminal:some View {VStack(alignment:.leading,spacing:16){
-        TextEditor(text:$model.command).font(.system(size:13,design:.monospaced)).frame(height:100).padding(10).glassSurface(16).accessibilityIdentifier("terminal.command")
-        HStack{action("執行","play.fill"){model.run(session)}.disabled(model.running).accessibilityIdentifier("terminal.run");action("停止","stop.fill"){Task{await model.cancelJob(session)}}.disabled(model.jobID.isEmpty)}
+        TextEditor(text:$model.command).focused($commandFocused).autocorrectionDisabled(true).textInputAutocapitalization(.never).modifier(TerminalEditorBackground()).font(.system(size:13,design:.monospaced)).frame(height:100).padding(10).glassSurface(16).accessibilityIdentifier("terminal.command")
+        HStack{action("執行","play.fill"){commandFocused=false;model.run(session)}.disabled(model.running).accessibilityIdentifier("terminal.run");action("停止","stop.fill"){Task{await model.cancelJob(session)}}.disabled(model.jobID.isEmpty)}
         HStack{TextField("常用指令名稱",text:$model.scriptName).insetField();action("儲存","bookmark"){model.saveCommand()}}
         if !model.scripts.isEmpty{Menu("常用指令"){ForEach(model.scripts){script in Button(script.id){model.command=script.command}}}.tint(ConsoleColor.mint)}
         Text(model.output).font(.system(size:12,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding(16).glassSurface(20).accessibilityIdentifier("terminal.output")
         Text("單次指令最長 120 秒；關閉工具面板後，已開始嘅工作會繼續執行。").font(.system(size:10)).foregroundColor(ConsoleColor.muted)
     }}
     private var dashboard:some View {VStack(alignment:.leading,spacing:20){Text(model.deviceSummary).font(.system(size:14)).lineSpacing(8).frame(maxWidth:.infinity,alignment:.leading).padding(20).glassSurface(24).accessibilityIdentifier("dashboard.device");Text(model.relaySummary).font(.system(size:13)).lineSpacing(8).frame(maxWidth:.infinity,alignment:.leading).padding(20).glassSurface(24).accessibilityIdentifier("dashboard.relay");if !model.warning.isEmpty{Label(model.warning,systemImage:"exclamationmark.triangle").foregroundColor(.orange)};action("重新整理","arrow.clockwise"){Task{await model.dashboard(session)}}}}
+}
+
+private struct TerminalEditorBackground: ViewModifier {
+    @ViewBuilder func body(content:Content)->some View {
+        if #available(iOS 16.0,*) {content.scrollContentBackground(.hidden)} else {content}
+    }
 }

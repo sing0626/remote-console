@@ -148,9 +148,9 @@ final class MotionUITests: XCTestCase {
     func test09NativeFilesTerminalAndDashboard() {
         app.launchArguments=[];app.launch();connectFixture()
         expectation(for:NSPredicate(format:"label == %@","已連接 · 可操作"),evaluatedWith:app.staticTexts["session.status"]);waitForExpectations(timeout:45)
-        tap("session.tools");tap("tools.files");title("電話檔案")
+        tap("session.tools");tap("tools.files");title("電話檔案");XCTAssertGreaterThanOrEqual(app.buttons["panel.close"].frame.minY,0)
         XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout:10));shot("native-files")
-        tap("panel.close");tap("session.tools");tap("tools.terminal");title("Root 終端")
+        tap("panel.close");tap("session.tools");tap("tools.terminal");title("Root 終端");XCTAssertGreaterThanOrEqual(app.buttons["panel.close"].frame.minY,0)
         let editor=app.textViews["terminal.command"];XCTAssertTrue(editor.waitForExistence(timeout:6));editor.tap();editor.typeText("printf halfcloud-test")
         tap("terminal.run")
         expectation(for:NSPredicate(format:"label CONTAINS %@","[synthetic fixture]"),evaluatedWith:app.staticTexts["terminal.output"]);waitForExpectations(timeout:12);shot("native-terminal")
