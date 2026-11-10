@@ -150,7 +150,7 @@ public final class NativeSession {
                 String name=device.optString("name",device.optString("device_id","Android"));ui(()->listener.device(name));
                 options=new JSONObject().put("video_codec","h264").put("audio_codec","opus").put("video_bit_rate",String.valueOf(bitrate)).put("max_size",String.valueOf(size)).put("max_fps",String.valueOf(fps)).put("audio","true").put("control","true").put("video_codec_options","profile=1");
                 JSONObject shared=request("/api/screen/sessions",null).optJSONObject("stream_options");
-                if(shared!=null&&shared.length()>0){options=shared;requestedFps=shared.optInt("max_fps",requestedFps);ui(()->listener.message("已沿用其他連線嘅共用畫質。"));}
+                if(shared!=null&&shared.length()>0){options=shared;currentBitrate=shared.optInt("video_bit_rate",currentBitrate);requestedFps=shared.optInt("max_fps",requestedFps);ui(()->listener.message("已沿用其他連線嘅共用畫質。"));}
                 JSONObject config=request("/api/ice-config",null);regions=config.optJSONArray("relay_regions");if(regions==null)regions=new JSONArray();
                 activeRegion="";
                 if(regions.length()>0){
@@ -183,8 +183,8 @@ public final class NativeSession {
         socket=http.newWebSocket(new Request.Builder().url(origin.replaceFirst("^http","ws")+"/screen/ws").build(),new WebSocketListener(){
             @Override public void onOpen(WebSocket ws,Response response){enqueue(attempt,()->{try{JSONObject config=new JSONObject().put("device_type","android").put("device_id",device.getString("device_id")).put("device_ip",device.optString("ip")).put("device_port",device.opt("port").toString()).put("relay_region",activeRegion).put("av_sync",false).put("driver_config",options).put("sdp",peer.getLocalDescription().description);ws.send(config.toString());}catch(Exception e){fail("無法建立電話連線。");}});}
             @Override public void onMessage(WebSocket ws,String text){enqueue(attempt,()->signal(text));}
-            @Override public void onFailure(WebSocket ws,Throwable error,Response response){enqueue(attempt,()->fail("訊號連線中斷，請重新連接。"));}
-            @Override public void onClosed(WebSocket ws,int code,String reason){enqueue(attempt,()->fail("電話已中斷連線。"));}
+            @Override public void onFailure(WebSocket ws,Throwable error,Response response){enqueue(attempt,()->fail("訊號連線中斷，請重新連接。",response==null||(response.code()!=401&&response.code()!=403)));}
+            @Override public void onClosed(WebSocket ws,int code,String reason){enqueue(attempt,()->fail(code==1008?"控制端授權已失效，請重新授權。":"電話已中斷連線。",code!=1008));}
         });
     }
     private void signal(String text){try{
@@ -283,6 +283,7 @@ public final class NativeSession {
         if(body!=null)builder.post(RequestBody.create(body.toString(),MediaType.get("application/json")));
         try(Response response=http.newCall(builder.build()).execute()){
             if(response.code()==401&&response.header("WWW-Authenticate","").toLowerCase(Locale.ROOT).contains("basic"))throw new SessionException("請核對進階設定嘅外網帳戶同密碼。");
+            if(response.code()>=500)throw new IOException("入口暫時未能連接");
             byte[] bytes=response.peekBody(131073).bytes();if(bytes.length>131072)throw new IOException();
             return new AuthResponse(response.code(),new JSONObject(new String(bytes,StandardCharsets.UTF_8)));
         }
@@ -291,7 +292,7 @@ public final class NativeSession {
         AuthResponse status=authorization("status",null);
         if(status.status!=200||!status.body.optBoolean("supported"))throw new SessionException("呢個入口未支援控制端授權，請更新外網主機；舊版區域網配對可喺進階設定填寫 PIN。");
         String stored=credentialStore.load(origin);
-        if(stored!=null){AuthResponse check=authorization("session",new JSONObject().put("credential",stored));if(check.status==200&&check.body.optBoolean("authenticated")){controllerCredential=stored;return true;}if(check.status!=401)throw new SessionException("暫時未能驗證控制端，請稍後再連接。");credentialStore.remove(origin);}
+        if(stored!=null){AuthResponse check=authorization("session",new JSONObject().put("credential",stored));if(check.status==200&&check.body.optBoolean("authenticated")){controllerCredential=stored;return true;}if(check.status!=401)throw new SessionException("暫時未能驗證控制端，請稍後再連接。",check.status>=500);if(retryCount>0)throw new SessionException("控制端授權已失效，請重新授權。");credentialStore.remove(origin);}
         String name=android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL;
         AuthResponse created=authorization("requests",new JSONObject().put("name",name).put("platform","android").put("kind","native"));
         if(created.status!=201)throw new SessionException("暫時未能提出授權要求，請稍後再試。");

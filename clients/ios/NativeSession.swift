@@ -25,6 +25,7 @@ final class NativeSession: NSObject, ObservableObject {
     @Published var relayRegions: [[String: String]] = []
     private var networkPolicy = AdaptiveNetworkPolicy()
     private var retryCount = 0, currentBitrate = 8_000_000
+    private var regionMetadata: [[String:Any]] = []
     private var activeRegion = "", qualityToken = ""
     private var retryWork: DispatchWorkItem?
     private var cookieStore = URLSessionConfiguration.ephemeral.httpCookieStorage
@@ -140,9 +141,10 @@ final class NativeSession: NSObject, ObservableObject {
                 self.device = device; deviceName = routingName ?? device["display_name"] as? String ?? device["name"] as? String ?? device["device_id"] as? String ?? "Android"
                 let sessions = try await request("/api/screen/sessions")
                 guard generation == epoch else { return }
-                if let shared = sessions["stream_options"] as? [String: String], !shared.isEmpty { options = shared; requestedFPS = Int(shared["max_fps"] ?? "") ?? requestedFPS; notice = "已沿用其他連線嘅共用畫質。" } else { options = profile.options }
+                if let shared = sessions["stream_options"] as? [String: String], !shared.isEmpty { options = shared; currentBitrate=Int(shared["video_bit_rate"] ?? "") ?? currentBitrate; requestedFPS = Int(shared["max_fps"] ?? "") ?? requestedFPS; notice = "已沿用其他連線嘅共用畫質。" } else { options = profile.options }
                 var ice = try await request("/api/ice-config")
                 let available = ice["relay_regions"] as? [[String: Any]] ?? []
+                regionMetadata=available
                 relayRegions = available.compactMap { item in guard let id=item["id"] as? String,let name=item["name"] as? String else {return nil};return ["id":id,"name":name] }
                 activeRegion = ""
                 if !relayRegions.isEmpty {
@@ -293,6 +295,7 @@ final class NativeSession: NSObject, ObservableObject {
         let (data, raw) = try await http.data(for: request)
         guard let response = raw as? HTTPURLResponse, data.count <= 131072 else { throw Failure.message("未能連接授權服務。") }
         if response.statusCode == 401 && (response.value(forHTTPHeaderField: "WWW-Authenticate") ?? "").lowercased().contains("basic") { throw Failure.message("請核對進階設定嘅外網帳戶同密碼。") }
+        if response.statusCode>=500{throw Failure.http(response.statusCode)}
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw Failure.message("呢個入口未支援控制端授權，請更新外網主機。") }
         return (response.statusCode,object)
     }
@@ -307,6 +310,7 @@ final class NativeSession: NSObject, ObservableObject {
             guard generation == epoch else { throw CancellationError() }
             if code == 200 && object["authenticated"] as? Bool == true { controllerCredential = credential; return }
             guard code == 401 else { throw Failure.message("暫時未能驗證控制端，請稍後再連接。") }
+            if retryCount>0{throw Failure.message("控制端授權已失效，請重新授權。") }
             try ControllerCredentialVault.remove(origin)
         }
         let name = UIDevice.current.model
@@ -363,6 +367,9 @@ final class NativeSession: NSObject, ObservableObject {
             pc.statistics { [weak self, weak pc] report in self?.onMain { [weak self, weak pc] in guard let self = self, let pc = pc, self.valid(pc) else { return }; self.updateStats(report) } }
         }
     }
+    private func relayLabel(url:String,address:String)->String {
+        for region in regionMetadata {for endpoint in region["urls"] as? [String] ?? [] {let base=String(endpoint.split(separator:"?")[0]);let host=base.replacingOccurrences(of:"turn:",with:"").replacingOccurrences(of:"turns:",with:"").split(separator:":").first.map(String.init) ?? "";if url.hasPrefix(base) || (!address.isEmpty && address==host){return "TURN · \(region["name"] as? String ?? "中繼")"}}};return "TURN 中繼"
+    }
     private func updateStats(_ report: RTCStatisticsReport) {
         var frames = 0.0, bytes = 0.0, fps = 0.0, rtt = 0.0, packets = 0.0, lost = 0.0, jitter = 0.0, pairID = "", route = "P2P 直連"
         let all = report.statistics
@@ -374,7 +381,7 @@ final class NativeSession: NSObject, ObservableObject {
         }
         if let pair = all[pairID] {
             rtt = number(pair.values["currentRoundTripTime"]) * 1000
-            for field in ["localCandidateId","remoteCandidateId"] { if let id = pair.values[field] as? String, all[id]?.values["candidateType"] as? String == "relay" { route = "TURN 中繼" } }
+            for field in ["localCandidateId","remoteCandidateId"] { if let id = pair.values[field] as? String, all[id]?.values["candidateType"] as? String == "relay" { route = relayLabel(url:all[id]?.values["url"] as? String ?? "",address:all[id]?.values["address"] as? String ?? all[id]?.values["ip"] as? String ?? "") } }
         }
         let now = Date(), elapsed = max(0.1, now.timeIntervalSince(previousTime))
         if fps == 0 { fps = max(0,(frames - previousFrames) / elapsed) }

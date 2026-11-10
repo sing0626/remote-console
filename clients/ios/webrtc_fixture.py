@@ -34,7 +34,7 @@ peers = set()
 trust_states = {18741: {"requests": {}, "credentials": {}}, 18742: {"requests": {}, "credentials": {}}}
 credential_sockets = {}
 
-metrics = {"offers": 0, "connected": 0, "controlPackets": 0, "outboundAudioBytes": 0, "outboundVideoBytes": 0, "connectionsByDevice": {}, "approvalRequests": 0, "credentialSessions": 0}
+metrics = {"offers": 0, "connected": 0, "controlPackets": 0, "outboundAudioBytes": 0, "outboundVideoBytes": 0, "connectionsByDevice": {}, "approvalRequests": 0, "credentialSessions": 0, "terminalJobs":0,"toolReads":0}
 
 
 def selected(request):
@@ -86,6 +86,10 @@ async def api(request):
             for ws in list(credential_sockets.get(credential, set())):
                 await ws.close(code=1008, message=b"controller_revoked")
         return web.json_response({"revoked": True})
+    if request.path == "/fixture/drop" and request.method == "POST":
+        for sockets in list(credential_sockets.values()):
+            for ws in list(sockets): await ws.close(code=1001,message=b"network fixture")
+        return web.json_response({"dropped":True})
     if request.path == "/health":
         return web.json_response({"ok": True})
     if request.path == "/metrics":
@@ -104,6 +108,18 @@ async def api(request):
         return response
     if not authorized(request) and request.cookies.get("fixture") != "local-only-" + device_id:
         return web.json_response({"error": "fixture authentication required"}, status=401)
+    if request.path == "/api/tools/files":
+        metrics['toolReads']+=1
+        return web.json_response({"path":".","entries":[{"name":"Download","path":"Download","directory":True,"size":0}],"next_offset":-1})
+    if request.path == "/api/tools/status":
+        return web.json_response({"version":"fixture","root":True,"device":{"model":"Synthetic fixture","android":"test","battery_percent":73,"temperature_c":28.5,"network":"loopback"}})
+    if request.path == "/_remoteconsole/relays/status":
+        return web.json_response({"relays":[{"id":"hk","name":"香港測試中繼","available":True,"report":{"day":{"rx":1000,"tx":2000},"month":{"rx":1000,"tx":2000},"total":{"rx":1000,"tx":2000}}}]})
+    if request.path == "/api/tools/terminal/jobs" and request.method == "POST":
+        metrics['terminalJobs']+=1
+        return web.json_response({"id":"fixture-job"},status=202)
+    if request.path == "/api/tools/terminal/jobs/fixture-job":
+        return web.json_response({"output":"halfcloud-test\n[synthetic fixture]\n","offset":35,"done":True,"exit_code":0})
     if request.path == "/api/device/list":
         return web.json_response({"devices": [{"device_type": "android", "device_id": "loopback-" + device_id, "name": "WebRTC 測試串流（非真機）", "ip": "127.0.0.1", "port": 0}]})
     if request.path == "/api/screen/sessions":

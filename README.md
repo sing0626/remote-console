@@ -4,9 +4,9 @@
 
 ## 下載
 
-目前版本為 **0.4.2 / 1042**，提供 iOS 控制端、Android 控制端、Android 受控端及 VPS 服務。控制端使用原生介面，iOS 支援互動 Liquid Glass。
+目前版本為 **0.5.0 / 1050**，提供 iOS 控制端、Android 控制端、Android 受控端及 VPS 服務。控制端使用原生介面，iOS 支援互動 Liquid Glass。
 
-APK、iOS IPA 及 VPS 安裝包見 [0.4.2 發佈頁](https://github.com/sing0626/remote-console/releases/tag/v0.4.2)。iOS IPA 需自行簽署後安裝。
+APK、iOS IPA 及 VPS 安裝包見 [0.5.0 發佈頁](https://github.com/sing0626/remote-console/releases/tag/v0.5.0)。iOS IPA 需自行簽署後安裝。
 
 從舊套件轉用以下 App ID 時會建立獨立 App；請先保留舊 App，新控制端重新批准一次即可。
 
@@ -17,6 +17,17 @@ APK、iOS IPA 及 VPS 安裝包見 [0.4.2 發佈頁](https://github.com/sing0626
 | iOS 控制端 | `com.sing.halfcloud.controller` |
 
 受控端的 Root 工作目錄為 `/data/local/tmp/remote-console`；既有部署沿用原本位置。
+
+## 遙控工具
+
+- 香港／日本中繼：設定內選自動或指定地區，連接失敗時自動改用備援。
+- 自動重連：網絡中斷後以 2–30 秒間隔重試，保留電話及信任登入。
+- 自適應位元率：按丟包、延遲及抖動調整編碼碼率，設定值作為上限；多人共用串流由首個控制端調節。
+- 電話檔案：瀏覽 `/sdcard`、建立資料夾、上傳／下載及續傳；上傳經 SHA-256 校驗，APK 可直接安裝。
+- Root 終端：執行指令、讀取輸出、停止工作、儲存常用指令；單次最長 120 秒。
+- 電話與中繼：電量、溫度、網絡、Root 狀態，以及今日／本月／累計流量與 80%／95% 額度提醒。
+
+iOS、Android 控制端由「更多」開啟上述工具。傳輸中斷後重新選取同一檔案，或按 iOS 的「續傳」繼續。
 
 ## 安裝與連接
 
@@ -35,7 +46,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/main
 既有伺服器以 root 執行：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.2/install.sh) upgrade --release v0.4.2
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.0/install.sh) upgrade --release v0.5.0
 remote-console
 ```
 
@@ -48,16 +59,24 @@ remote-console
 在中繼主機以 root 執行，按提示輸入公網 IPv4：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.2/relay-install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.0/relay-install.sh)
 ```
 
 放行 TCP／UDP 3478、UDP 49160–49260。安裝後會顯示接駁碼；在原本入口主機執行以下一行並貼上接駁碼：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.2/relay-install.sh) connect
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.0/relay-install.sh) connect
 ```
 
 受控端需使用 0.4.2 或更新版本，約一分鐘內同步網絡設定，重新連線後生效。入口網址、電話配對及控制端授權沿用。
+
+已有香港中繼時，日本入口升級會自動保留香港設定並補回原本日本中繼作備援。香港中繼升級後，執行以下一行啟用 App 流量面板：
+
+```bash
+remote-console-relay report-to --origin https://your-control.example.com
+```
+
+將網址換成現有入口；香港主機每分鐘經 HTTPS 回報。App 流量統計會顯示未更新狀態，直至收到回報。
 
 輸入 `remote-console-relay` 開啟中繼管理選單：
 
@@ -73,7 +92,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4
 流量以香港時間計日／月，統計整張網卡（包含 SSH 等連線），由安裝時開始累積。原入口主機可用以下指令還原之前的中繼設定：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.4.2/relay-install.sh) disconnect
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.0/relay-install.sh) disconnect
 ```
 
 ## 原始碼

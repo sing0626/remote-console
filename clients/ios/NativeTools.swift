@@ -34,8 +34,9 @@ struct FileShare: UIViewControllerRepresentable {
     }
     static func query(_ value:String) -> String { value.addingPercentEncoding(withAllowedCharacters:CharacterSet(charactersIn:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")) ?? "" }
     static func bytes(_ value:Int64) -> String { ByteCountFormatter.string(fromByteCount:value,countStyle:.decimal) }
+    func prepare(_ session:NativeSession){bind(session)}
     private func bind(_ session:NativeSession) {
-        if scope==session.toolScope{return};scope=session.toolScope;folder="";files=[];output="$ ";jobID="";running=false
+        if scope==session.toolScope{return};work?.cancel();commandWork?.cancel();scope=session.toolScope;folder="";files=[];output="$ ";jobID="";running=false
     }
     private func savePending(_ item:PendingTransfer?) {pending=item;if let item=item,let data=try? JSONEncoder().encode(item){UserDefaults.standard.set(data,forKey:"pendingTransfer")}else{UserDefaults.standard.removeObject(forKey:"pendingTransfer")}}
     private static func cache() throws -> URL {
@@ -89,7 +90,7 @@ struct FileShare: UIViewControllerRepresentable {
         while state["complete"] as? Bool != true {
             try Task.checkCancellation();let offset=(state["offset"] as? NSNumber)?.uint64Value ?? 0
             if offset>=size{break};try handle.seek(toOffset:offset)
-            guard let block=try handle.read(upToCount:Int(min(4*1024*1024,size-offset))),!block.isEmpty else{throw CocoaError(.fileReadCorruptFile)}
+            guard let block=try handle.read(upToCount:Int(min(512*1024,size-offset))),!block.isEmpty else{throw CocoaError(.fileReadCorruptFile)}
             do {state=try await session.toolData("PUT","/api/tools/uploads/\(id)?offset=\(offset)",body:block,headers:["Content-Type":"application/octet-stream"]);failures=0}
             catch {try Task.checkCancellation();if let e=error as? NativeSession.ToolError,[401,403,413].contains(e.code){throw error};failures+=1;if failures>5{throw error};try await Task.sleep(nanoseconds:UInt64(min(10,failures*2))*1_000_000_000);state=try await session.tool("GET","/api/tools/uploads/"+id)}
             let done=(state["offset"] as? NSNumber)?.doubleValue ?? 0;progress=size==0 ? 1:done/Double(size);message="上傳 \(item.name) · \(Self.bytes(Int64(done))) / \(Self.bytes(Int64(size)))"
@@ -102,15 +103,16 @@ struct FileShare: UIViewControllerRepresentable {
     private func receive(_ item:PendingTransfer,_ session:NativeSession) async throws {
         let file=URL(fileURLWithPath:item.local),tag=file.appendingPathExtension("etag");var failures=0
         while true {
-            try Task.checkCancellation();let offset=(try? FileManager.default.attributesOfItem(atPath:file.path)[.size] as? NSNumber)?.uint64Value ?? 0
+            try Task.checkCancellation();var offset=(try? FileManager.default.attributesOfItem(atPath:file.path)[.size] as? NSNumber)?.uint64Value ?? 0
             let etag=(try? String(contentsOf:tag,encoding:.utf8)) ?? ""
+            if offset>0 && etag.isEmpty {try FileManager.default.removeItem(at:file);offset=0}
             var headers=["Range":"bytes=\(offset)-\(offset+4*1024*1024-1)"]
             if offset>0 && !etag.isEmpty{headers["If-Range"]=etag}
             do {
                 let(temp,response)=try await session.toolDownload("/api/tools/files/download?path="+Self.query(item.remote),headers:headers)
                 defer{try? FileManager.default.removeItem(at:temp)}
                 let contentRange=response.value(forHTTPHeaderField:"Content-Range") ?? ""
-                if response.statusCode==416 && contentRange=="bytes */\(offset)" && FileManager.default.fileExists(atPath:file.path){break}
+                if response.statusCode==416 && contentRange=="bytes */\(offset)" {if offset==0{FileManager.default.createFile(atPath:file.path,contents:Data())};if FileManager.default.fileExists(atPath:file.path){break}}
                 guard response.statusCode != 416 else{throw NativeSession.ToolError(code:416)}
                 let nextTag=response.value(forHTTPHeaderField:"ETag") ?? ""
                 if response.statusCode==206 {guard contentRange.hasPrefix("bytes \(offset)-") else{throw CocoaError(.fileReadCorruptFile)}}
@@ -164,7 +166,7 @@ struct NativeToolsView: View {
         .sheet(item:$model.exported){item in FileShare(url:item.url)}
         .alert("刪除檔案？",isPresented:Binding(get:{deletion != nil},set:{if !$0{deletion=nil}})){Button("刪除",role:.destructive){if let file=deletion{Task{await model.remove(file,session)}};deletion=nil};Button("取消",role:.cancel){deletion=nil}} message:{Text(deletion?.name ?? "")}
         .alert("安裝 APK？",isPresented:Binding(get:{installation != nil},set:{if !$0{installation=nil}})){Button("安裝"){if let file=installation{model.run(session,apk:file.path)};installation=nil};Button("取消",role:.cancel){installation=nil}} message:{Text(installation?.name ?? "")}
-        .task(id:page){if page == .files{await model.list(session)}else if page == .dashboard {while !Task.isCancelled{await model.dashboard(session);try? await Task.sleep(nanoseconds:15_000_000_000)}}}
+        .task(id:page){model.prepare(session);if page == .files{await model.list(session)}else if page == .dashboard {while !Task.isCancelled{await model.dashboard(session);try? await Task.sleep(nanoseconds:15_000_000_000)}}}
     }
     private func action(_ title:String,_ icon:String,_ work:@escaping()->Void)->some View {Button(action:work){Label(title,systemImage:icon).font(.system(size:12,weight:.medium)).padding(.horizontal,14).frame(height:42)}.buttonStyle(.plain).interactiveCapsuleGlass()}
     private var fileBrowser:some View {VStack(alignment:.leading,spacing:16){
@@ -172,7 +174,31 @@ struct NativeToolsView: View {
         HStack{action("上層","arrow.up"){model.parent(session)};action("上傳","square.and.arrow.up"){importer=true}.accessibilityIdentifier("files.upload");action("重新整理","arrow.clockwise"){Task{await model.list(session)}}}
         HStack{TextField("新增資料夾",text:$folderName).insetField();action("建立","folder.badge.plus"){let name=folderName;folderName="";Task{await model.mkdir(name,session)}}}
         if model.busy {ProgressView(value:model.progress).tint(ConsoleColor.mint);action("暫停","pause.fill"){model.pause()}}else if model.pending != nil {action("續傳上次檔案","arrow.clockwise"){model.resume(session)}}
-        VStack(spacing:0){ForEach(model.files){file in HStack(spacing:12){Image(systemName:file.directory ? "folder.fill":"doc").foregroundColor(ConsoleColor.mint);Button {if file.directory{model.enter(file,session)}else{model.download(file,session)}}label:{VStack(alignment:.leading,spacing:5){Text(file.name).font(.system(size:14));if !file.directory{Text(NativeToolsModel.bytes(file.size)).font(.system(size:10)).foregroundColor(ConsoleColor.muted)}}.buttonStyle(.plain);Spacer();Menu{if file.directory{Button("開啟"){model.enter(file,session)}}else{Button("下載"){model.download(file,session)};if file.name.lowercased().hasSuffix(".apk"){Button("安裝 APK"){installation=file}}};Button("刪除",role:.destructive){deletion=file}}label:{Image(systemName:"ellipsis").frame(width:36,height:44)}}.padding(.horizontal,14).padding(.vertical,8);Divider().opacity(0.15)}}.glassSurface(20)
+        VStack(spacing:0) {
+            ForEach(model.files) { file in
+                HStack(spacing:12) {
+                    Image(systemName:file.directory ? "folder.fill":"doc").foregroundColor(ConsoleColor.mint)
+                    Button {
+                        if file.directory {model.enter(file,session)} else {model.download(file,session)}
+                    } label: {
+                        VStack(alignment:.leading,spacing:5) {
+                            Text(file.name).font(.system(size:14))
+                            if !file.directory {Text(NativeToolsModel.bytes(file.size)).font(.system(size:10)).foregroundColor(ConsoleColor.muted)}
+                        }
+                    }.buttonStyle(.plain)
+                    Spacer()
+                    Menu {
+                        if file.directory {Button("開啟"){model.enter(file,session)}}
+                        else {
+                            Button("下載"){model.download(file,session)}
+                            if file.name.lowercased().hasSuffix(".apk") {Button("安裝 APK"){installation=file}}
+                        }
+                        Button("刪除",role:.destructive){deletion=file}
+                    } label: {Image(systemName:"ellipsis").frame(width:36,height:44)}
+                }.padding(.horizontal,14).padding(.vertical,8)
+                Divider().opacity(0.15)
+            }
+        }.glassSurface(20)
         if model.nextOffset>=0{action("載入更多","arrow.down"){Task{await model.list(session,append:true)}}}
         if !model.output.isEmpty && model.output != "$ " {Text(model.output).font(.system(size:11,design:.monospaced)).textSelection(.enabled).padding(14).glassSurface(16)}
     }}

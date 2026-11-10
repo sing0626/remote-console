@@ -145,4 +145,31 @@ final class MotionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["home.connect"].waitForExistence(timeout: 8))
     }
 
+    func test09NativeFilesTerminalAndDashboard() {
+        app.launchArguments=[];app.launch();connectFixture()
+        expectation(for:NSPredicate(format:"label == %@","已連接 · 可操作"),evaluatedWith:app.staticTexts["session.status"]);waitForExpectations(timeout:45)
+        tap("session.tools");tap("tools.files");title("電話檔案")
+        XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout:10));shot("native-files")
+        tap("panel.close");tap("session.tools");tap("tools.terminal");title("Root 終端")
+        let editor=app.textViews["terminal.command"];XCTAssertTrue(editor.waitForExistence(timeout:6));editor.tap();editor.typeText("printf halfcloud-test")
+        tap("terminal.run")
+        expectation(for:NSPredicate(format:"label CONTAINS %@","halfcloud-test"),evaluatedWith:app.staticTexts["terminal.output"]);waitForExpectations(timeout:12);shot("native-terminal")
+        tap("panel.close");tap("session.tools");tap("tools.dashboard");title("電話與中繼")
+        expectation(for:NSPredicate(format:"label CONTAINS %@","Synthetic fixture"),evaluatedWith:app.staticTexts["dashboard.device"]);waitForExpectations(timeout:12);shot("native-dashboard")
+        tap("panel.close");XCTAssertEqual(app.state,.runningForeground)
+        tap("session.tools");tap("tools.disconnect")
+    }
+    func test10AutomaticReconnectKeepsPhoneAndTrust() {
+        app.launchArguments=[];app.launch();connectFixture(endpoint:"http://127.0.0.1:18742/control")
+        if app.buttons["picker.host.fixture-b"].waitForExistence(timeout:4){tap("picker.host.fixture-b")}
+        expectation(for:NSPredicate(format:"label == %@","已連接 · 可操作"),evaluatedWith:app.staticTexts["session.status"]);waitForExpectations(timeout:45)
+        let current=app.staticTexts["測試電話 B"].exists ? "測試電話 B":"測試電話 A"
+        var request=URLRequest(url:URL(string:"http://127.0.0.1:18742/fixture/drop")!);request.httpMethod="POST"
+        let dropped=expectation(description:"network drops");URLSession.shared.dataTask(with:request){_,_,_ in dropped.fulfill()}.resume();waitForExpectations(timeout:10)
+        expectation(for:NSPredicate(format:"label != %@","已連接 · 可操作"),evaluatedWith:app.staticTexts["session.status"]);waitForExpectations(timeout:15)
+        expectation(for:NSPredicate(format:"label == %@","已連接 · 可操作"),evaluatedWith:app.staticTexts["session.status"]);waitForExpectations(timeout:50)
+        XCTAssertTrue(app.staticTexts[current].exists);XCTAssertFalse(app.staticTexts["等候受控電話批准"].isHittable);shot("automatic-reconnect")
+        tap("session.home");tap("session.tools");tap("tools.disconnect")
+    }
+
 }

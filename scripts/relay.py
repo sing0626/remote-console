@@ -638,10 +638,10 @@ def traffic(args):
 def uninstall():
     config()
     run('systemctl', 'disable', '--now', SERVICE, STATS, TIMER)
+    run('systemctl','disable','--now','halfcloud-relay-report.timer',check=False)
     for name in [SERVICE, STATS, TIMER, 'halfcloud-relay-logrotate.service', 'halfcloud-relay-report.service', 'halfcloud-relay-report.timer']:
         (UNITS/name).unlink(missing_ok=True)
     run('systemctl', 'daemon-reload')
-    run('systemctl','disable','--now','halfcloud-relay-report.timer',check=False)
     LAUNCHER.unlink(missing_ok=True)
     APP.unlink(missing_ok=True)
     print('中繼已解除安裝；設定、統計及日誌保留，重新執行安裝可啟用。')

@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const ChunkSize int64 = 4 << 20
+const ChunkSize int64 = 512 << 10
 const MaxFileSize int64 = 16 << 30
 
 type ownerKey struct{}
