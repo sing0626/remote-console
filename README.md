@@ -4,9 +4,9 @@
 
 ## 下載
 
-目前版本為 **0.5.0 / 1050**，提供 iOS 控制端、Android 控制端、Android 受控端及 VPS 服務。控制端使用原生介面，iOS 支援互動 Liquid Glass。
+目前版本為 **0.5.1 / 1051**，提供 iOS 控制端、Android 控制端、Android 受控端及 VPS 服務。控制端使用原生介面，iOS 支援互動 Liquid Glass。
 
-APK、iOS IPA 及 VPS 安裝包見 [0.5.0 發佈頁](https://github.com/sing0626/remote-console/releases/tag/v0.5.0)。iOS IPA 需自行簽署後安裝。
+APK、iOS IPA 及 VPS 安裝包見 [0.5.1 發佈頁](https://github.com/sing0626/remote-console/releases/tag/v0.5.1)。iOS IPA 需自行簽署後安裝。
 
 從舊套件轉用以下 App ID 時會建立獨立 App；請先保留舊 App，新控制端重新批准一次即可。
 
@@ -46,7 +46,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/main
 既有伺服器以 root 執行：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.0/install.sh) upgrade --release v0.5.0
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.1/install.sh) upgrade --release v0.5.1
 remote-console
 ```
 
@@ -59,13 +59,13 @@ remote-console
 在中繼主機以 root 執行，按提示輸入公網 IPv4：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.0/relay-install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.1/relay-install.sh)
 ```
 
 放行 TCP／UDP 3478、UDP 49160–49260。安裝後會顯示接駁碼；在原本入口主機執行以下一行並貼上接駁碼：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.0/relay-install.sh) connect
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.1/relay-install.sh) connect
 ```
 
 受控端需使用 0.4.2 或更新版本，約一分鐘內同步網絡設定，重新連線後生效。入口網址、電話配對及控制端授權沿用。
@@ -92,7 +92,7 @@ remote-console-relay report-to --origin https://your-control.example.com
 流量以香港時間計日／月，統計整張網卡（包含 SSH 等連線），由安裝時開始累積。原入口主機可用以下指令還原之前的中繼設定：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.0/relay-install.sh) disconnect
+bash <(curl -fsSL https://raw.githubusercontent.com/sing0626/remote-console/v0.5.1/relay-install.sh) disconnect
 ```
 
 ## 原始碼

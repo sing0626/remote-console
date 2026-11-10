@@ -1,0 +1,22 @@
+name: Package verified native iOS source
+on: [workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select Liquid Glass SDK
+        run: |
+          XCODE_PATH=$(python3 -c 'import glob,pathlib; p=glob.glob("/Applications/Xcode_26*.app"); print(sorted(p,key=lambda s:tuple(int(x) for x in pathlib.Path(s).stem.split("_")[1].split(".")))[-1]+"/Contents/Developer")')
+          echo "DEVELOPER_DIR=$XCODE_PATH" >> "$GITHUB_ENV"
+      - run: bash clients/ios/build_unsigned.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iOS-unsigned-package
+          path: clients/ios/build/RemoteController-unsigned.ipa

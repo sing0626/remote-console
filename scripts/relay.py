@@ -24,7 +24,7 @@ import time
 import urllib.request
 import urllib.parse
 
-VERSION = '0.5.0'
+VERSION = '0.5.1'
 OWNER = 'halfcloud-relay'
 ETC = Path('/etc/halfcloud-relay')
 APP = Path('/usr/local/lib/halfcloud-relay/relay.py')
