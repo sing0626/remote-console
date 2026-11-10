@@ -440,6 +440,7 @@ class Manager:
                 if path.exists(): remove_owned(path)
             self.p.data = old_data; self.project = PROJECT
             raise RuntimeError('升級未完成，已恢復原有服務；配對及授權資料保留。原因：'+str(error)) from error
+        self.upgrade_network()
         print('已升級至 '+version['release']+' 並接入 remote-console 選單。原本電話 ID、配對及控制端授權保留。')
         print('原始程式及 Compose 留喺 '+str(legacy)+'；電話資料沿用 '+str(data))
         self.instructions(cfg)
