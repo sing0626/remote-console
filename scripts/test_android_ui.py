@@ -11,10 +11,10 @@ OUT = Path('ui-evidence')
 OUT.mkdir(exist_ok=True)
 
 def adb(*args):
-    return subprocess.check_output(['adb', *map(str, args)], stderr=subprocess.STDOUT)
+    return subprocess.check_output(['adb', *map(str, args)], stderr=subprocess.STDOUT, timeout=45)
 
 def tree():
-    adb('shell', 'uiautomator', 'dump', '/sdcard/halfcloud-test-ui.xml')
+    adb('shell', 'uiautomator', 'dump', '--compressed', '/sdcard/halfcloud-test-ui.xml')
     raw = adb('shell', 'cat', '/sdcard/halfcloud-test-ui.xml')
     (OUT/'last-ui.xml').write_bytes(raw)
     return list(ET.fromstring(raw).iter('node'))
@@ -22,11 +22,18 @@ def tree():
 def find(text, contains=False, timeout=20):
     until = time.monotonic()+timeout
     while time.monotonic() < until:
-        for node in tree():
+        try:
+            nodes = tree()
+        except (subprocess.SubprocessError, ET.ParseError) as error:
+            (OUT/'automation-retry.txt').write_text(str(error))
+            time.sleep(2)
+            continue
+        for node in nodes:
             labels = [node.get('text', ''), node.get('content-desc', '')]
             if any(text in value if contains else text == value for value in labels):
                 return node
         time.sleep(.4)
+    shot('missing-control')
     raise AssertionError('Missing UI: '+text)
 
 def tap_node(node):
@@ -42,8 +49,12 @@ def shot(name):
 def connected():
     return find('已連接 · 可操作', timeout=70)
 
+assert adb('get-serialno').decode().strip().startswith('emulator-'), 'Use only the disposable CI emulator'
+assert adb('shell', 'getprop', 'ro.kernel.qemu').decode().strip() == '1'
 adb('install', '-r', 'controller/build/outputs/apk/debug/controller-debug.apk')
 adb('shell', 'am', 'start', '-n', 'com.sing.halfcloud.controller/.ControllerActivity')
+time.sleep(3)
+shot('home')
 tap('電話網址')
 adb('shell', 'input', 'text', 'http://10.0.2.2:18741/control')
 adb('shell', 'input', 'keyevent', '4')
