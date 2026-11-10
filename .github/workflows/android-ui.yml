@@ -4,7 +4,7 @@ permissions:
   contents: read
 jobs:
   native-controller:
-    runs-on: macos-15-intel
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -31,13 +31,14 @@ jobs:
           nohup python3 -u clients/ios/webrtc_fixture.py > ui-evidence/fixture.log 2>&1 &
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
+          api-level: 28
+          target: default
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
           disable-animations: true
-          emulator-boot-timeout: 900
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-snapshot -no-boot-anim -camera-back none
+          disable-linux-hw-accel: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-snapshot -no-boot-anim -camera-back none -memory 2048 -cores 2 -skin 720x1440
           script: python3 scripts/test_android_ui.py
       - uses: actions/upload-artifact@v4
         if: always()
