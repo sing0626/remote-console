@@ -4,7 +4,7 @@ permissions:
   contents: read
 jobs:
   native-controller:
-    runs-on: ubuntu-24.04
+    runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -12,6 +12,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
@@ -20,6 +21,7 @@ jobs:
           python-version: '3.12'
       - name: Build native controller and start synthetic WebRTC fixture
         run: |
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
           gradle :controller:assembleDebug --no-daemon --console=plain
           python3 -m pip install -r clients/ios/fixture-requirements.txt
           mkdir -p ui-evidence
@@ -31,7 +33,6 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          disable-linux-hw-accel: true
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-snapshot -no-boot-anim -camera-back none
           script: python3 scripts/test_android_ui.py
